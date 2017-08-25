@@ -206,7 +206,7 @@ function update() {
     y = 1875;
   }
 
-  ctx.fillStyle = "000000";
+  ctx.fillStyle = "#000000";
   ctx.fillRect(0, 0, canvas.width, canvas.height);
   camera.begin();
   var endTime = new Date();
@@ -237,7 +237,7 @@ function update() {
         } else if (i == 1 && j == 1) {
           ctx.fillStyle = "#00FF00"
         } else {
-          ctx.fillStyle = "#CFCFCF";
+          ctx.fillStyle = "#FFFFFF";
         }
         ctx.fillRect(25 * j, 25 * i, 27, 27);
         ctx.stroke();
