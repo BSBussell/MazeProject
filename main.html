@@ -94,6 +94,15 @@
       this.Camera = Camera;
 
     }).call(this);
+
+    function clearCircle(context, x, y, radius) {
+      context.save();
+      context.beginPath();
+      context.arc(x, y, radius, 0, 2 * Math.PI, true);
+      context.clip();
+      context.clearRect(x - radius, y - radius, radius * 2, radius * 2);
+      context.restore();
+    }
   </script>
   <script>
     var canvas = document.getElementById("canvas");
@@ -383,9 +392,13 @@
       }
       //console.log(waitClick)
       if (begin != true && lose == false && win == false) {
+        ctx.fillStyle = "#545454";
+        ctx.clearRect(canvas.width-55, canvas.height-45, 40,-35)
+
         ctx.font = "30px Arial";
-        ctx.fillStyle = "#FFFFFF";
-        ctx.fillText(String(Wait - seconds), 300, 50);
+        ctx.fillStyle = "#000000";
+        ctx.fillText(String(Wait - seconds), canvas.width-50, canvas.height-50);
+
       }
       if (Wait < 0) {
         ctx.font = "60px Arial";
