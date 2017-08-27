@@ -597,6 +597,7 @@
     var dispText = "None"
     var textTimer = 0;
     var waitClick = true;
+    var animationSpeed = 5;
 
     function genMaze(width, height, startX, startY) {
       var maze = [];
@@ -727,6 +728,8 @@
 
     if (/Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent)) {
       speed = 1.5;
+      camera.zoomTo(300)
+      animationSpeed = 2
       console.log("true")
     }
 
@@ -775,8 +778,8 @@
         win = true;
       }
       if (begin != true && lose != true && win != true) {
-        y += velY;
-        x += velX;
+        y = Math.floor(y + velY);
+        x = Math.floor(x + velX);
         var coords = camera.worldToScreen(x, y);
         camera.moveTo(Math.floor(x), Math.floor(y));
       }
@@ -835,7 +838,7 @@
 
         if (anim >= 0 && beginCount != true) {
           camera.moveTo(anim, anim);
-          anim = anim - 5;
+          anim = anim - animationSpeed;
           if (anim <= 0) {
 
           }
