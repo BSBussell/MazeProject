@@ -3,7 +3,6 @@
 <html>
 
 <head>
-  <link rel="stylesheet" type="text/css" href="/Users/BenBusBoy/Documents/LanguageArtsProg/MazeProject/Style.css">
   <style>
     h1 {
       align-content: center;
@@ -726,6 +725,11 @@
       friction = 0.88,
       keys = [];
 
+    if (/Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent)) {
+      speed = 1.5;
+      console.log("true")
+    }
+
     function update() {
       requestAnimationFrame(update);
 
@@ -909,9 +913,11 @@
       waitClick = false;
       if (begin == true) {
         beginCount = true;
+        camera.moveTo(x, y);
       }
-      camera.moveTo(x, y);
+
     }
+
 
     update();
 
@@ -923,6 +929,9 @@
     });
     document.body.addEventListener("click", doMouseDown);
     document.body.addEventListener("touchstart", doMouseDown);
+    document.body.addEventListener("touchmove", function move() {
+
+    });
   </script>
 </body>
 
