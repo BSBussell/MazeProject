@@ -1,5 +1,4 @@
 <!DOCTYPE html>
-
 <html>
 
 <head>
@@ -7,10 +6,6 @@
     body,
     html {
       margin: 0;
-    }
-
-    canvas {
-
     }
   </style>
   <script>
@@ -38,6 +33,11 @@
             Your browser does not support the HTML5 Canvas tag, please stop using Internet Explorer.
   </canvas>
 
+  <!--
+    The Camera Library, Not programmed by me, but it's something thats going
+    to be beyond my level for a really long time. And it would be pointless
+    reinventing of the wheel
+  -->
   <script>
     (function() {
 
@@ -121,6 +121,10 @@
       context.restore();
     }
   </script>
+  <!--
+    A Joystick Plugin, because I was running out of time and its also very
+    simple, but I don't want to understand Javascript enough to do it
+  -->
   <script>
     var VirtualJoystick = function(opts) {
       opts = opts || {};
@@ -601,7 +605,8 @@
       }
       resizeCanvas();
     }
-
+    // Resize the game area incase of
+    // really wide or small screens
     function resizeCanvas() {
       // Set up temporary canvas
       var tmpCanvas = document.createElement('canvas');
@@ -643,6 +648,11 @@
     var waitClick = true;
     var animationSpeed = 5;
 
+    // GenMaze is probably the part that I am most proud of
+    // But it works pretty simply
+    // IT snakes its way through an empty grid useing a
+    // randomized first-depth search algorithm
+    // I came very close to copying and pasteing other peoples code
     function genMaze(width, height, startX, startY) {
       var maze = [];
       var row = new Array(height);
@@ -758,7 +768,6 @@
       return maze;
     }
 
-
     var maze = genMaze(75, 75, 1, 1);
     console.log(maze)
 
@@ -770,6 +779,7 @@
       friction = 0.88,
       keys = [];
 
+    // Check if user is mobile then calls proper functions for it
     if (/Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent)) {
       speed = 1.65;
       camera.zoomTo(300)
@@ -812,11 +822,18 @@
 
       } else {
 
+        // I needed this white space for something
+        // And until I can remember what that is
+        // It Stays
 
       }
       if (maze[Math.round((y + velY) / 25)][Math.round(x / 25)] > 0 || maze[Math.floor((y + velY) / 25)][Math.floor(x / 25)] > 0) {
         velY = 0
       } else {
+
+        // I needed this white space for something
+        // And until I can remember what that is
+        // It Stays
 
       }
       if (Math.floor(x / 25) == 73 && Math.floor(y / 25) == 73 || Math.round(x / 25) == 73 && Math.round(y / 25) == 73) {
@@ -852,7 +869,7 @@
         startDate = new Date();
         Wait -= 5 //(Math.floor(Math.random() * 5)) + 15;
         maze = genMaze(75, 75, 1, 1)
-        while (maze[Math.round(y / 25)][Math.round((x) / 25)] > 0 || maze[Math.floor(y / 25)][Math.floor((x) / 25)] > 0) {
+        while ((maze[Math.round(y / 25)][Math.round((x) / 25)] > 0 || maze[Math.floor(y / 25)][Math.floor((x) / 25)] > 0)) {
           maze = genMaze(75, 75, 1, 1)
         }
       }
@@ -892,6 +909,7 @@
           //beginCount = true
           /*begin = false;
           startDate = new Date();*/
+          // I'm keeping this here incase it randomly breaks and I can just go uncomment this
         }
 
       }
@@ -926,7 +944,7 @@
       if (Wait < 0) {
         ctx.font = "60px Arial";
         ctx.fillStyle = "#FF0000";
-        ctx.fillText("You Lose", canvas.width*.5, canvas.height*.5);
+        ctx.fillText("You Lose", canvas.width * .5, canvas.height * .5);
         lose = true;
         //ctx.fillText("Guess you couldn't adapt agile Enough...",750,250)
       }
@@ -936,6 +954,7 @@
         ctx.fillText("You Win", 300, 300);
       }
       if (dispText != "None") {
+        // I was going to have something Here, but I ran out of time, so I just hard coded text in
 
       }
       if (beginCount == true) {
@@ -984,3 +1003,4 @@
 </body>
 
 </html>
+<
