@@ -545,7 +545,8 @@
     var joystick = new VirtualJoystick({
       mouseSupport: false,
       limitStickTravel: true,
-      stickRadius: 50
+      stickRadius: 50,
+      strokeStyle: "#4444cc"
     });
 
     // left: 37, up: 38, right: 39, down: 40,
@@ -915,21 +916,21 @@
       }
       //console.log(waitClick)
       if (begin != true && lose == false && win == false) {
-        ctx.fillStyle = "#545454";
-        ctx.clearRect(canvas.width - 55, canvas.height - 45, 40, -35)
+
 
         ctx.font = "30px Arial";
-        ctx.fillStyle = "#000000";
+        ctx.fillStyle = "#FF0000";
         ctx.fillText(String(Wait - seconds), canvas.width - 50, canvas.height - 50);
 
       }
       if (Wait < 0) {
         ctx.font = "60px Arial";
         ctx.fillStyle = "#FF0000";
-        ctx.fillText("You Lose", 500, 300);
+        ctx.fillText("You Lose", canvas.width*.5, canvas.height*.5);
+        lose = true;
         //ctx.fillText("Guess you couldn't adapt agile Enough...",750,250)
       }
-      if (win == true) {
+      if (win == true && lose == false) {
         ctx.font = "60px Arial";
         ctx.fillStyle = "#00FFFF";
         ctx.fillText("You Win", 300, 300);
