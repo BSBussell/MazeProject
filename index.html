@@ -4,12 +4,13 @@
 
 <head>
   <style>
-    h1 {
-      align-content: center;
+    body,
+    html {
+      margin: 0;
     }
 
     canvas {
-      align-content: "center";
+
     }
   </style>
   <script>
@@ -33,7 +34,7 @@
 
 <body>
 
-  <canvas id="canvas" width="1000" height="600" style="border:0px solid #000000;">
+  <canvas id="canvas" width="1000" height="600" align="left">
             Your browser does not support the HTML5 Canvas tag, please stop using Internet Explorer.
   </canvas>
 
@@ -547,6 +548,47 @@
       stickRadius: 50
     });
 
+    // left: 37, up: 38, right: 39, down: 40,
+    // spacebar: 32, pageup: 33, pagedown: 34, end: 35, home: 36
+    var keys = {
+      37: 1,
+      38: 1,
+      39: 1,
+      40: 1
+    };
+
+    function preventDefault(e) {
+      e = e || window.event;
+      if (e.preventDefault)
+        e.preventDefault();
+      e.returnValue = false;
+    }
+
+    function preventDefaultForScrollKeys(e) {
+      if (keys[e.keyCode]) {
+        preventDefault(e);
+        return false;
+      }
+    }
+
+    function disableScroll() {
+      if (window.addEventListener) // older FF
+        window.addEventListener('DOMMouseScroll', preventDefault, false);
+      window.onwheel = preventDefault; // modern standard
+      window.onmousewheel = document.onmousewheel = preventDefault; // older browsers, IE
+      window.ontouchmove = preventDefault; // mobile
+      document.onkeydown = preventDefaultForScrollKeys;
+    }
+
+    function enableScroll() {
+      if (window.removeEventListener)
+        window.removeEventListener('DOMMouseScroll', preventDefault, false);
+      window.onmousewheel = document.onmousewheel = null;
+      window.onwheel = null;
+      window.ontouchmove = null;
+      document.onkeydown = null;
+    }
+
     function init() {
       //canvas = document.getElementById('canvas');
       if (canvas.getContext) {
@@ -556,6 +598,7 @@
         window.addEventListener('orientationchange', resizeCanvas, false);
         resizeCanvas();
       }
+      resizeCanvas();
     }
 
     function resizeCanvas() {
@@ -576,8 +619,8 @@
       ctx = canvas.getContext('2d');
       ctx.drawImage(tempCanvas, 0, 0, tempCanvas.width, tempCanvas.height, 0, 0, canvas.width, canvas.height);
 
-      canvas.width = window.innerWidth;
-      canvas.height = window.innerHeight;
+      canvas.style.width = window.innerWidth;
+      canvas.style.height = window.innerHeight;
     }
 
     var coords = camera.worldToScreen(0, 0);
@@ -727,9 +770,10 @@
       keys = [];
 
     if (/Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent)) {
-      speed = 1.5;
+      speed = 1.65;
       camera.zoomTo(300)
       animationSpeed = 2
+      disableScroll();
       console.log("true")
     }
 
@@ -778,8 +822,8 @@
         win = true;
       }
       if (begin != true && lose != true && win != true) {
-        y = Math.floor(y + velY);
-        x = Math.floor(x + velX);
+        y = Math.round(y + velY);
+        x = Math.round(x + velX);
         var coords = camera.worldToScreen(x, y);
         camera.moveTo(Math.floor(x), Math.floor(y));
       }
