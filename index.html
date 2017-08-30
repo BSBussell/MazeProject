@@ -1,0 +1,1005 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+  <style>
+    body,
+    html {
+      margin: 0;
+    }
+  </style>
+  <script>
+    (function(i, s, o, g, r, a, m) {
+      i['GoogleAnalyticsObject'] = r;
+      i[r] = i[r] || function() {
+        (i[r].q = i[r].q || []).push(arguments)
+      }, i[r].l = 1 * new Date();
+      a = s.createElement(o),
+        m = s.getElementsByTagName(o)[0];
+      a.async = 1;
+      a.src = g;
+      m.parentNode.insertBefore(a, m)
+    })(window, document, 'script', 'https://www.google-analytics.com/analytics.js', 'ga');
+
+    ga('create', 'UA-105384030-1', 'auto');
+    ga('send', 'pageview');
+  </script>
+  <title>Maze</title>
+</head>
+
+<body>
+
+  <canvas id="canvas" width="1000" height="600" align="left">
+            Your browser does not support the HTML5 Canvas tag, please stop using Internet Explorer.
+  </canvas>
+
+  <!--
+    The Camera Library, Not programmed by me, but it's something thats going
+    to be beyond my level for a really long time. And it would be pointless
+    to reinvent the wheel for a english project
+  -->
+  <script>
+    (function() {
+
+      var Camera = function(context, settings) {
+        settings = settings || {};
+        this.distance = 1000.0;
+        this.lookat = [0, 0];
+        this.context = context;
+        this.fieldOfView = settings.fieldOfView || Math.PI / 4.0;
+        this.viewport = {
+          left: 0,
+          right: 0,
+          top: 0,
+          bottom: 0,
+          width: 0,
+          height: 0,
+          scale: [1.0, 1.0]
+        };
+        this.updateViewport();
+      };
+
+      Camera.prototype = {
+        begin: function() {
+          this.context.save();
+          this.applyScale();
+          this.applyTranslation();
+        },
+        end: function() {
+          this.context.restore();
+        },
+        applyScale: function() {
+          this.context.scale(this.viewport.scale[0], this.viewport.scale[1]);
+        },
+        applyTranslation: function() {
+          this.context.translate(-this.viewport.left, -this.viewport.top);
+        },
+        updateViewport: function() {
+          this.aspectRatio = this.context.canvas.width / this.context.canvas.height;
+          this.viewport.width = this.distance * Math.tan(this.fieldOfView);
+          this.viewport.height = this.viewport.width / this.aspectRatio;
+          this.viewport.left = this.lookat[0] - (this.viewport.width / 2.0);
+          this.viewport.top = this.lookat[1] - (this.viewport.height / 2.0);
+          this.viewport.right = this.viewport.left + this.viewport.width;
+          this.viewport.bottom = this.viewport.top + this.viewport.height;
+          this.viewport.scale[0] = this.context.canvas.width / this.viewport.width;
+          this.viewport.scale[1] = this.context.canvas.height / this.viewport.height;
+        },
+        zoomTo: function(z) {
+          this.distance = z;
+          this.updateViewport();
+        },
+        moveTo: function(x, y) {
+          this.lookat[0] = x;
+          this.lookat[1] = y;
+          this.updateViewport();
+        },
+        screenToWorld: function(x, y, obj) {
+          obj = obj || {};
+          obj.x = (x / this.viewport.scale[0]) + this.viewport.left;
+          obj.y = (y / this.viewport.scale[1]) + this.viewport.top;
+          return obj;
+        },
+        worldToScreen: function(x, y, obj) {
+          obj = obj || {};
+          obj.x = (x - this.viewport.left) * (this.viewport.scale[0]);
+          obj.y = (y - this.viewport.top) * (this.viewport.scale[1]);
+          return obj;
+        }
+      };
+
+      this.Camera = Camera;
+
+    }).call(this);
+
+    function clearCircle(context, x, y, radius) {
+      context.save();
+      context.beginPath();
+      context.arc(x, y, radius, 0, 2 * Math.PI, true);
+      context.clip();
+      context.clearRect(x - radius, y - radius, radius * 2, radius * 2);
+      context.restore();
+    }
+  </script>
+  <!--
+    A Joystick Plugin, because I was running out of time and its also very
+    simple, but I don't want to understand Javascript enough to do it
+  -->
+  <script>
+    var VirtualJoystick = function(opts) {
+      opts = opts || {};
+      this._container = opts.container || document.body;
+      this._strokeStyle = opts.strokeStyle || 'cyan';
+      this._stickEl = opts.stickElement || this._buildJoystickStick();
+      this._baseEl = opts.baseElement || this._buildJoystickBase();
+      this._mouseSupport = opts.mouseSupport !== undefined ? opts.mouseSupport : false;
+      this._stationaryBase = opts.stationaryBase || false;
+      this._baseX = this._stickX = opts.baseX || 0
+      this._baseY = this._stickY = opts.baseY || 0
+      this._limitStickTravel = opts.limitStickTravel || false
+      this._stickRadius = opts.stickRadius !== undefined ? opts.stickRadius : 100
+      this._useCssTransform = opts.useCssTransform !== undefined ? opts.useCssTransform : false
+
+      this._container.style.position = "relative"
+
+      this._container.appendChild(this._baseEl)
+      this._baseEl.style.position = "absolute"
+      this._baseEl.style.display = "none"
+      this._container.appendChild(this._stickEl)
+      this._stickEl.style.position = "absolute"
+      this._stickEl.style.display = "none"
+
+      this._pressed = false;
+      this._touchIdx = null;
+
+      if (this._stationaryBase === true) {
+        this._baseEl.style.display = "";
+        this._baseEl.style.left = (this._baseX - this._baseEl.width / 2) + "px";
+        this._baseEl.style.top = (this._baseY - this._baseEl.height / 2) + "px";
+      }
+
+      this._transform = this._useCssTransform ? this._getTransformProperty() : false;
+      this._has3d = this._check3D();
+
+      var __bind = function(fn, me) {
+        return function() {
+          return fn.apply(me, arguments);
+        };
+      };
+      this._$onTouchStart = __bind(this._onTouchStart, this);
+      this._$onTouchEnd = __bind(this._onTouchEnd, this);
+      this._$onTouchMove = __bind(this._onTouchMove, this);
+      this._container.addEventListener('touchstart', this._$onTouchStart, false);
+      this._container.addEventListener('touchend', this._$onTouchEnd, false);
+      this._container.addEventListener('touchmove', this._$onTouchMove, false);
+      if (this._mouseSupport) {
+        this._$onMouseDown = __bind(this._onMouseDown, this);
+        this._$onMouseUp = __bind(this._onMouseUp, this);
+        this._$onMouseMove = __bind(this._onMouseMove, this);
+        this._container.addEventListener('mousedown', this._$onMouseDown, false);
+        this._container.addEventListener('mouseup', this._$onMouseUp, false);
+        this._container.addEventListener('mousemove', this._$onMouseMove, false);
+      }
+    }
+
+    VirtualJoystick.prototype.destroy = function() {
+      this._container.removeChild(this._baseEl);
+      this._container.removeChild(this._stickEl);
+
+      this._container.removeEventListener('touchstart', this._$onTouchStart, false);
+      this._container.removeEventListener('touchend', this._$onTouchEnd, false);
+      this._container.removeEventListener('touchmove', this._$onTouchMove, false);
+      if (this._mouseSupport) {
+        this._container.removeEventListener('mouseup', this._$onMouseUp, false);
+        this._container.removeEventListener('mousedown', this._$onMouseDown, false);
+        this._container.removeEventListener('mousemove', this._$onMouseMove, false);
+      }
+    }
+
+    /**
+     * @returns {Boolean} true if touchscreen is currently available, false otherwise
+     */
+    VirtualJoystick.touchScreenAvailable = function() {
+      return 'createTouch' in document ? true : false;
+    }
+
+    /**
+     * microevents.js - https://github.com/jeromeetienne/microevent.js
+     */
+    ;
+    (function(destObj) {
+      destObj.addEventListener = function(event, fct) {
+        if (this._events === undefined) this._events = {};
+        this._events[event] = this._events[event] || [];
+        this._events[event].push(fct);
+        return fct;
+      };
+      destObj.removeEventListener = function(event, fct) {
+        if (this._events === undefined) this._events = {};
+        if (event in this._events === false) return;
+        this._events[event].splice(this._events[event].indexOf(fct), 1);
+      };
+      destObj.dispatchEvent = function(event /* , args... */ ) {
+        if (this._events === undefined) this._events = {};
+        if (this._events[event] === undefined) return;
+        var tmpArray = this._events[event].slice();
+        for (var i = 0; i < tmpArray.length; i++) {
+          var result = tmpArray[i].apply(this, Array.prototype.slice.call(arguments, 1))
+          if (result !== undefined) return result;
+        }
+        return undefined
+      };
+    })(VirtualJoystick.prototype);
+
+    //////////////////////////////////////////////////////////////////////////////////
+    //										//
+    //////////////////////////////////////////////////////////////////////////////////
+
+    VirtualJoystick.prototype.deltaX = function() {
+      return this._stickX - this._baseX;
+    }
+    VirtualJoystick.prototype.deltaY = function() {
+      return this._stickY - this._baseY;
+    }
+
+    VirtualJoystick.prototype.up = function() {
+      if (this._pressed === false) return false;
+      var deltaX = this.deltaX();
+      var deltaY = this.deltaY();
+      if (deltaY >= 0) return false;
+      if (Math.abs(deltaX) > 2 * Math.abs(deltaY)) return false;
+      return true;
+    }
+    VirtualJoystick.prototype.down = function() {
+      if (this._pressed === false) return false;
+      var deltaX = this.deltaX();
+      var deltaY = this.deltaY();
+      if (deltaY <= 0) return false;
+      if (Math.abs(deltaX) > 2 * Math.abs(deltaY)) return false;
+      return true;
+    }
+    VirtualJoystick.prototype.right = function() {
+      if (this._pressed === false) return false;
+      var deltaX = this.deltaX();
+      var deltaY = this.deltaY();
+      if (deltaX <= 0) return false;
+      if (Math.abs(deltaY) > 2 * Math.abs(deltaX)) return false;
+      return true;
+    }
+    VirtualJoystick.prototype.left = function() {
+      if (this._pressed === false) return false;
+      var deltaX = this.deltaX();
+      var deltaY = this.deltaY();
+      if (deltaX >= 0) return false;
+      if (Math.abs(deltaY) > 2 * Math.abs(deltaX)) return false;
+      return true;
+    }
+
+    //////////////////////////////////////////////////////////////////////////////////
+    //										//
+    //////////////////////////////////////////////////////////////////////////////////
+
+    VirtualJoystick.prototype._onUp = function() {
+      this._pressed = false;
+      this._stickEl.style.display = "none";
+
+      if (this._stationaryBase == false) {
+        this._baseEl.style.display = "none";
+
+        this._baseX = this._baseY = 0;
+        this._stickX = this._stickY = 0;
+      }
+    }
+
+    VirtualJoystick.prototype._onDown = function(x, y) {
+      this._pressed = true;
+      if (this._stationaryBase == false) {
+        this._baseX = x;
+        this._baseY = y;
+        this._baseEl.style.display = "";
+        this._move(this._baseEl.style, (this._baseX - this._baseEl.width / 2), (this._baseY - this._baseEl.height / 2));
+      }
+
+      this._stickX = x;
+      this._stickY = y;
+
+      if (this._limitStickTravel === true) {
+        var deltaX = this.deltaX();
+        var deltaY = this.deltaY();
+        var stickDistance = Math.sqrt((deltaX * deltaX) + (deltaY * deltaY));
+        if (stickDistance > this._stickRadius) {
+          var stickNormalizedX = deltaX / stickDistance;
+          var stickNormalizedY = deltaY / stickDistance;
+
+          this._stickX = stickNormalizedX * this._stickRadius + this._baseX;
+          this._stickY = stickNormalizedY * this._stickRadius + this._baseY;
+        }
+      }
+
+      this._stickEl.style.display = "";
+      this._move(this._stickEl.style, (this._stickX - this._stickEl.width / 2), (this._stickY - this._stickEl.height / 2));
+    }
+
+    VirtualJoystick.prototype._onMove = function(x, y) {
+      if (this._pressed === true) {
+        this._stickX = x;
+        this._stickY = y;
+
+        if (this._limitStickTravel === true) {
+          var deltaX = this.deltaX();
+          var deltaY = this.deltaY();
+          var stickDistance = Math.sqrt((deltaX * deltaX) + (deltaY * deltaY));
+          if (stickDistance > this._stickRadius) {
+            var stickNormalizedX = deltaX / stickDistance;
+            var stickNormalizedY = deltaY / stickDistance;
+
+            this._stickX = stickNormalizedX * this._stickRadius + this._baseX;
+            this._stickY = stickNormalizedY * this._stickRadius + this._baseY;
+          }
+        }
+
+        this._move(this._stickEl.style, (this._stickX - this._stickEl.width / 2), (this._stickY - this._stickEl.height / 2));
+      }
+    }
+
+
+    //////////////////////////////////////////////////////////////////////////////////
+    //		bind touch events (and mouse events for debug)			//
+    //////////////////////////////////////////////////////////////////////////////////
+
+    VirtualJoystick.prototype._onMouseUp = function(event) {
+      return this._onUp();
+    }
+
+    VirtualJoystick.prototype._onMouseDown = function(event) {
+      event.preventDefault();
+      var x = event.clientX;
+      var y = event.clientY;
+      return this._onDown(x, y);
+    }
+
+    VirtualJoystick.prototype._onMouseMove = function(event) {
+      var x = event.clientX;
+      var y = event.clientY;
+      return this._onMove(x, y);
+    }
+
+    //////////////////////////////////////////////////////////////////////////////////
+    //		comment								//
+    //////////////////////////////////////////////////////////////////////////////////
+
+    VirtualJoystick.prototype._onTouchStart = function(event) {
+      // if there is already a touch inprogress do nothing
+      if (this._touchIdx !== null) return;
+
+      // notify event for validation
+      var isValid = this.dispatchEvent('touchStartValidation', event);
+      if (isValid === false) return;
+
+      // dispatch touchStart
+      this.dispatchEvent('touchStart', event);
+
+      event.preventDefault();
+      // get the first who changed
+      var touch = event.changedTouches[0];
+      // set the touchIdx of this joystick
+      this._touchIdx = touch.identifier;
+
+      // forward the action
+      var x = touch.pageX;
+      var y = touch.pageY;
+      return this._onDown(x, y)
+    }
+
+    VirtualJoystick.prototype._onTouchEnd = function(event) {
+      // if there is no touch in progress, do nothing
+      if (this._touchIdx === null) return;
+
+      // dispatch touchEnd
+      this.dispatchEvent('touchEnd', event);
+
+      // try to find our touch event
+      var touchList = event.changedTouches;
+      for (var i = 0; i < touchList.length && touchList[i].identifier !== this._touchIdx; i++);
+      // if touch event isnt found,
+      if (i === touchList.length) return;
+
+      // reset touchIdx - mark it as no-touch-in-progress
+      this._touchIdx = null;
+
+      //??????
+      // no preventDefault to get click event on ios
+      event.preventDefault();
+
+      return this._onUp()
+    }
+
+    VirtualJoystick.prototype._onTouchMove = function(event) {
+      // if there is no touch in progress, do nothing
+      if (this._touchIdx === null) return;
+
+      // try to find our touch event
+      var touchList = event.changedTouches;
+      for (var i = 0; i < touchList.length && touchList[i].identifier !== this._touchIdx; i++);
+      // if touch event with the proper identifier isnt found, do nothing
+      if (i === touchList.length) return;
+      var touch = touchList[i];
+
+      event.preventDefault();
+
+      var x = touch.pageX;
+      var y = touch.pageY;
+      return this._onMove(x, y)
+    }
+
+
+    //////////////////////////////////////////////////////////////////////////////////
+    //		build default stickEl and baseEl				//
+    //////////////////////////////////////////////////////////////////////////////////
+
+    /**
+     * build the canvas for joystick base
+     */
+    VirtualJoystick.prototype._buildJoystickBase = function() {
+      var canvas = document.createElement('canvas');
+      canvas.width = 126;
+      canvas.height = 126;
+
+      var ctx = canvas.getContext('2d');
+      ctx.beginPath();
+      ctx.strokeStyle = this._strokeStyle;
+      ctx.lineWidth = 6;
+      ctx.arc(canvas.width / 2, canvas.width / 2, 40, 0, Math.PI * 2, true);
+      ctx.stroke();
+
+      ctx.beginPath();
+      ctx.strokeStyle = this._strokeStyle;
+      ctx.lineWidth = 2;
+      ctx.arc(canvas.width / 2, canvas.width / 2, 60, 0, Math.PI * 2, true);
+      ctx.stroke();
+
+      return canvas;
+    }
+
+    /**
+     * build the canvas for joystick stick
+     */
+    VirtualJoystick.prototype._buildJoystickStick = function() {
+      var canvas = document.createElement('canvas');
+      canvas.width = 86;
+      canvas.height = 86;
+      var ctx = canvas.getContext('2d');
+      ctx.beginPath();
+      ctx.strokeStyle = this._strokeStyle;
+      ctx.lineWidth = 6;
+      ctx.arc(canvas.width / 2, canvas.width / 2, 40, 0, Math.PI * 2, true);
+      ctx.stroke();
+      return canvas;
+    }
+
+    //////////////////////////////////////////////////////////////////////////////////
+    //		move using translate3d method with fallback to translate > 'top' and 'left'
+    //      modified from https://github.com/component/translate and dependents
+    //////////////////////////////////////////////////////////////////////////////////
+
+    VirtualJoystick.prototype._move = function(style, x, y) {
+      if (this._transform) {
+        if (this._has3d) {
+          style[this._transform] = 'translate3d(' + x + 'px,' + y + 'px, 0)';
+        } else {
+          style[this._transform] = 'translate(' + x + 'px,' + y + 'px)';
+        }
+      } else {
+        style.left = x + 'px';
+        style.top = y + 'px';
+      }
+    }
+
+    VirtualJoystick.prototype._getTransformProperty = function() {
+      var styles = [
+        'webkitTransform',
+        'MozTransform',
+        'msTransform',
+        'OTransform',
+        'transform'
+      ];
+
+      var el = document.createElement('p');
+      var style;
+
+      for (var i = 0; i < styles.length; i++) {
+        style = styles[i];
+        if (null != el.style[style]) {
+          return style;
+        }
+      }
+    }
+
+    VirtualJoystick.prototype._check3D = function() {
+      var prop = this._getTransformProperty();
+      // IE8<= doesn't have `getComputedStyle`
+      if (!prop || !window.getComputedStyle) return module.exports = false;
+
+      var map = {
+        webkitTransform: '-webkit-transform',
+        OTransform: '-o-transform',
+        msTransform: '-ms-transform',
+        MozTransform: '-moz-transform',
+        transform: 'transform'
+      };
+
+      // from: https://gist.github.com/lorenzopolidori/3794226
+      var el = document.createElement('div');
+      el.style[prop] = 'translate3d(1px,1px,1px)';
+      document.body.insertBefore(el, null);
+      var val = getComputedStyle(el).getPropertyValue(map[prop]);
+      document.body.removeChild(el);
+      var exports = null != val && val.length && 'none' != val;
+      return exports;
+    }
+  </script>
+  <script>
+    var canvas = document.getElementById("canvas");
+    var ctx = canvas.getContext("2d");
+    var camera = new Camera(ctx);
+
+    var canvas;
+    var canvasWidth;
+
+    var joystick = new VirtualJoystick({
+      mouseSupport: false,
+      limitStickTravel: true,
+      stickRadius: 50,
+      strokeStyle: "#4444cc"
+    });
+
+    // left: 37, up: 38, right: 39, down: 40,
+    // spacebar: 32, pageup: 33, pagedown: 34, end: 35, home: 36
+    var keys = {
+      37: 1,
+      38: 1,
+      39: 1,
+      40: 1
+    };
+
+    function preventDefault(e) {
+      e = e || window.event;
+      if (e.preventDefault)
+        e.preventDefault();
+      e.returnValue = false;
+    }
+
+    function preventDefaultForScrollKeys(e) {
+      if (keys[e.keyCode]) {
+        preventDefault(e);
+        return false;
+      }
+    }
+
+    function disableScroll() {
+      if (window.addEventListener) // older FF
+        window.addEventListener('DOMMouseScroll', preventDefault, false);
+      window.onwheel = preventDefault; // modern standard
+      window.onmousewheel = document.onmousewheel = preventDefault; // older browsers, IE
+      window.ontouchmove = preventDefault; // mobile
+      document.onkeydown = preventDefaultForScrollKeys;
+    }
+
+    function enableScroll() {
+      if (window.removeEventListener)
+        window.removeEventListener('DOMMouseScroll', preventDefault, false);
+      window.onmousewheel = document.onmousewheel = null;
+      window.onwheel = null;
+      window.ontouchmove = null;
+      document.onkeydown = null;
+    }
+
+    function init() {
+      //canvas = document.getElementById('canvas');
+      if (canvas.getContext) {
+        //ctx = canvas.getContext("2d");
+
+        window.addEventListener('resize', resizeCanvas, false);
+        window.addEventListener('orientationchange', resizeCanvas, false);
+        resizeCanvas();
+      }
+      resizeCanvas();
+    }
+    // Resize the game area incase of
+    // really wide or small screens
+    function resizeCanvas() {
+      // Set up temporary canvas
+      var tmpCanvas = document.createElement('canvas');
+      tempCanvas.width = canvas.width;
+      tempCanvas.height = canvas.height;
+      tmpCtx = tempCanvas.getContext('2d');
+
+      // Copy to temporary canvas
+      tempCanvas.drawImage(canvas, 0, 0);
+
+      // Resize original canvas
+      canvas.width = window.innerWidth;
+      canvas.height = window.innerHeight;
+
+      // Copy back to resized canvas
+      ctx = canvas.getContext('2d');
+      ctx.drawImage(tempCanvas, 0, 0, tempCanvas.width, tempCanvas.height, 0, 0, canvas.width, canvas.height);
+
+      canvas.style.width = window.innerWidth;
+      canvas.style.height = window.innerHeight;
+    }
+
+    var coords = camera.worldToScreen(0, 0);
+    camera.moveTo(coords.x, coords.y);
+    ctx.fillStyle = "black";
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+    var startDate = new Date();
+    var Wait = 30 //Math.floor(Math.random() * 5) + 15;
+    console.log(Wait);
+    var begin = true;
+    var anim = 1875;
+    var CountDown = 3.9;
+    var beginCount = false;
+    var lose = false;
+    var win = false;
+    var dispText = "None"
+    var textTimer = 0;
+    var waitClick = true;
+    var animationSpeed = 5;
+
+    // GenMaze is probably the part that I am most proud of
+    // But it works pretty simply
+    // IT snakes its way through an empty grid useing a
+    // randomized first-depth search algorithm
+    // I came very close to copying and pasteing other peoples code
+    function genMaze(width, height, startX, startY) {
+      var maze = [];
+      var row = new Array(height);
+      row.fill(2);
+      maze.push(row);
+      for (i = 0; i <= width; i++) {
+        var row = []
+        row.push(2)
+        for (j = 0; j <= height - 3; j++) {
+          row.push(1)
+        }
+        row.push(2)
+        maze.push(row);
+      }
+      var row = new Array(height);
+      row.fill(2);
+      maze.push(row);
+
+
+      var posX = startX;
+      var posY = startY;
+      maze[posY][posX] = 0;
+      console.log("X:" + posY)
+      console.log("Y:" + posX)
+      var count = 1;
+      var color = "#FFFFFF"
+      var prevDir = -9
+
+      var listOfSteps = [];
+      var Directions = ["Left", "Right", "Up", "Down"]
+      var direction = Directions[Math.floor(Math.random() * Directions.length)];
+      //listOfSteps.push(direction)
+      while (maze[startY][startX] > -10) {
+
+        //console.log(maze[posY][posX+2])
+        color = "#FFFFFF"
+        //console.log("Log: "+listOfSteps)
+        if (direction == "Right" && (posX + 2 < width && maze[posY][posX + 2] >= 1) && prevDir != "Left") {
+          posX += 2;
+          maze[posY][posX - 1] -= 1;
+          count = 1;
+          prevDir = direction;
+          listOfSteps.push(direction);
+          //Directions.push("Right");
+        } else if (direction == "Left" && (posX - 2 > 0 && maze[posY][posX - 2] >= 1) && prevDir != "Right") {
+          posX -= 2;
+          maze[posY][posX + 1] -= 1;
+          count = 1;
+          prevDir = direction;
+          listOfSteps.push(direction);
+
+          //Directions.push("Left");
+        } else if (direction == "Down" && (posY + 2 < height && maze[posY + 2][posX] >= 1 && prevDir != "Up")) {
+          posY += 2;
+          maze[posY - 1][posX] -= 1;
+          count = 1;
+          prevDir = direction;
+          listOfSteps.push(direction);
+
+          //Directions.push("Down");
+        } else if (direction == "Up" && (posY - 2 > 0 && maze[posY - 2][posX] >= 1) && prevDir != "Down") {
+          posY -= 2;
+          maze[posY + 1][posX] -= 1;
+          count = 1;
+          prevDir = direction;
+          listOfSteps.push(direction);
+
+          //Directions.push("Up");
+        } else if (listOfSteps[listOfSteps.length - 1] == "Down" && count > 8) {
+          posY -= 2;
+          maze[posY + 1][posX] -= 1;
+          count = 1;
+          prevDir = direction;
+          listOfSteps.pop(); //listOfSteps.push("Up");
+
+          //console.log("Right");
+        } else if (listOfSteps[listOfSteps.length - 1] == "Up" && count > 8) {
+          posY += 2;
+          maze[posY - 1][posX] -= 1;
+          count = 1;
+          prevDir = direction;
+          listOfSteps.pop(); //listOfSteps.push("Down");
+
+          //console.log("Left");
+        } else if (listOfSteps[listOfSteps.length - 1] == "Right" && count > 8) {
+          posX -= 2;
+          maze[posY][posX + 1] -= 1;
+          count = 1;
+          prevDir = direction;
+          listOfSteps.pop(); //listOfSteps.push("Left");
+
+          //console.log("Up");
+        } else if (listOfSteps[listOfSteps.length - 1] == "Left" && count > 8) {
+          posX += 2;
+          maze[posY][posX - 1] -= 1;
+          count = 1;
+          prevDir = direction;
+          listOfSteps.pop(); //listOfSteps.push("Right");
+
+          //console.log("Down");
+        }
+        //if (listOfSteps.length <= 2) {listOfSteps.pop()}
+        var direction = Directions[Math.floor(Math.random() * Directions.length)];
+
+        maze[posY][posX] -= 1;
+        //console.log("X:"+posY)
+        //console.log("Y:"+posX)
+        //console.log(maze[posY][posX])
+        count++;
+        //if (count>15 && (posX ==1 && posY ==1)) {break}
+      }
+
+      return maze;
+    }
+
+    var maze = genMaze(75, 75, 1, 1);
+    console.log(maze)
+
+    var x = 25,
+      y = 25,
+      velY = 0,
+      velX = 0,
+      speed = 2,
+      friction = 0.88,
+      keys = [];
+
+    // Check if user is mobile then calls proper functions for it
+    if (/Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent)) {
+      speed = 1.65;
+      camera.zoomTo(300)
+      animationSpeed = 2
+      disableScroll();
+      console.log("true")
+    }
+
+    function update() {
+      requestAnimationFrame(update);
+
+      if (keys[38] || joystick.up()) {
+        if (velY > -speed) {
+          velY--;
+        }
+      }
+
+      if (keys[40] || joystick.down()) {
+        if (velY < speed) {
+          velY++;
+        }
+      }
+      if (keys[39] || joystick.right()) {
+        if (velX < speed) {
+          velX++;
+        }
+      }
+      if (keys[37] || joystick.left()) {
+        if (velX > -speed) {
+          velX--;
+        }
+      }
+
+      velY *= friction;
+      velX *= friction;
+
+      if (maze[Math.round(y / 25)][Math.round((x + velX) / 25)] > 0 || maze[Math.floor(y / 25)][Math.floor((x + velX) / 25)] > 0) {
+
+        velX = 0
+
+      } else {
+
+        // I needed this white space for something
+        // And until I can remember what that is
+        // It Stays!
+
+      }
+      if (maze[Math.round((y + velY) / 25)][Math.round(x / 25)] > 0 || maze[Math.floor((y + velY) / 25)][Math.floor(x / 25)] > 0) {
+        velY = 0
+      } else {
+
+        // I needed this white space for something
+        // And until I can remember what that is
+        // It Stays!
+
+      }
+      if (Math.floor(x / 25) == 73 && Math.floor(y / 25) == 73 || Math.round(x / 25) == 73 && Math.round(y / 25) == 73) {
+        win = true;
+      }
+      if (begin != true && lose != true && win != true) {
+        y = Math.round(y + velY);
+        x = Math.round(x + velX);
+        var coords = camera.worldToScreen(x, y);
+        camera.moveTo(Math.floor(x), Math.floor(y));
+      }
+
+      if (x >= 1875 - 13) {
+        x = 1250 - 13;
+      }
+
+      if (y > 1875 + 13) {
+        y = 1875;
+      }
+
+      ctx.fillStyle = "#000000";
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      camera.begin();
+      var endTime = new Date();
+      var timeDiff = endTime - startDate; //in ms
+      // strip the ms
+      timeDiff /= 1000;
+
+      // get seconds
+      var seconds = Math.round(timeDiff % 60);
+      //console.log(Wait + " sec");
+      if (seconds >= Wait && begin == false && win == false) {
+        startDate = new Date();
+        Wait -= 5 //(Math.floor(Math.random() * 5)) + 15;
+        maze = genMaze(75, 75, 1, 1)
+        while ((maze[Math.round(y / 25)][Math.round((x) / 25)] > 0 || maze[Math.floor(y / 25)][Math.floor((x) / 25)] > 0)) {
+          maze = genMaze(75, 75, 1, 1)
+        }
+      }
+      //ctx.fillRect(0, 0, 300, 300);
+      for (var i = 0; i < maze.length; i++) {
+        var row = maze[i];
+        for (var j = 0; j < row.length; j++) {
+          if (row[j] <= 0) {
+            var c = document.getElementById("canvas");
+            //  var ctx = c.getContext("2d");
+            if (i == 73 && j == 73) {
+              ctx.fillStyle = "#FF0000"
+            } else if (i == 1 && j == 1) {
+              ctx.fillStyle = "#00FF00"
+            } else {
+              ctx.fillStyle = "#CFCFCF";
+            }
+            ctx.fillRect(25 * j, 25 * i, 27, 27);
+            ctx.stroke();
+            //console.log("Maze[" +i+"][" +j+ "] = " + maze[i][j])
+          }
+
+        }
+      }
+      if (begin == true) {
+
+
+
+        if (anim >= 0 && beginCount != true) {
+          camera.moveTo(anim, anim);
+          anim = anim - animationSpeed;
+          if (anim <= 0) {
+
+          }
+        } else {
+          //waitClick = true;
+          //beginCount = true
+          /*begin = false;
+          startDate = new Date();*/
+          // I'm keeping this here incase it randomly breaks and I can just go uncomment this
+        }
+
+      }
+      ctx.beginPath();
+      ctx.fillStyle = "#0000FF"
+      ctx.fillRect(x, y, 13, 13)
+      ctx.fill();
+      camera.end();
+      if (begin == true && beginCount != true) {
+        ctx.font = "60px Arial";
+        ctx.fillStyle = "#000000";
+        //ctx.fillRect(185,250,600,200)
+        ctx.fillText("Agility and Adaptability", 195, 310);
+        ctx.fillStyle = "#2424cc";
+        ctx.fillText("Agility and Adaptability", 185, 300);
+      }
+      if (waitClick == true) {
+        ctx.font = "20px Arial";
+
+        ctx.fillStyle = "#FFFFFF";
+        ctx.fillText("Click to Start", 485, 500);
+      }
+      //console.log(waitClick)
+      if (begin != true && lose == false && win == false) {
+
+
+        ctx.font = "30px Arial";
+        ctx.fillStyle = "#FF0000";
+        ctx.fillText(String(Wait - seconds), canvas.width - 50, canvas.height - 50);
+
+      }
+      if (Wait < 0) {
+        ctx.font = "60px Arial";
+        ctx.fillStyle = "#FF0000";
+        ctx.fillText("You Lose", canvas.width * .5, canvas.height * .5);
+        lose = true;
+        //ctx.fillText("Guess you couldn't adapt agile Enough...",750,250)
+      }
+      if (win == true && lose == false) {
+        ctx.font = "60px Arial";
+        ctx.fillStyle = "#00FFFF";
+        ctx.fillText("You Win", 300, 300);
+      }
+      if (dispText != "None") {
+        // I was going to have something Here, but I ran out of time, so I just hard coded text in
+
+      }
+      if (beginCount == true) {
+        ctx.font = "60px Arial";
+        ctx.fillStyle = "#FF0000";
+        if (CountDown >= 1) {
+          ctx.fillText(Math.floor(CountDown), 500, 300);
+        } else if (CountDown <= 0 || CountDown > -1) {
+          ctx.fillText("GO!", 500, 300);
+          Wait = 30;
+          begin = false
+        }
+        if (CountDown < -2) {
+          startDate = new Date();
+          beginCount = false;
+        }
+        CountDown -= .020
+      }
+
+    }
+
+    function doMouseDown(event) {
+      waitClick = false;
+      if (begin == true) {
+        beginCount = true;
+        camera.moveTo(x, y);
+      }
+
+    }
+
+
+    update();
+
+    document.body.addEventListener("keydown", function(e) {
+      keys[e.keyCode] = true;
+    });
+    document.body.addEventListener("keyup", function(e) {
+      keys[e.keyCode] = false;
+    });
+    document.body.addEventListener("click", doMouseDown);
+    document.body.addEventListener("touchstart", doMouseDown);
+    document.body.addEventListener("touchmove", function move() {
+
+    });
+  </script>
+</body>
+
+</html>
