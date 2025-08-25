@@ -2,6 +2,7 @@
 <html>
 
 <head>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, user-scalable=no">
   <style>
     body,
     html {
@@ -12,6 +13,11 @@
       width: 100%;
       height: 100%;
       overflow: hidden;
+      /* Safe area support for iPhone notches */
+      padding-top: env(safe-area-inset-top);
+      padding-bottom: env(safe-area-inset-bottom);
+      padding-left: env(safe-area-inset-left);
+      padding-right: env(safe-area-inset-right);
     }
     
     canvas {
@@ -48,7 +54,7 @@
 
 <body>
 
-  <canvas id="canvas" width="1000" height="600" align="left" style="opacity: 0; transition: opacity 0.5s ease-in;">
+  <canvas id="canvas" width="1000" height="600" align="left" style="opacity: 0; transition: opacity 0.5s ease-in; position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; object-fit: contain;">
             Your browser does not support the HTML5 Canvas tag, please stop using Internet Explorer.
   </canvas>
 
@@ -904,15 +910,52 @@
     // Resize the game area incase of
     // really wide or small screens
     function resizeCanvas() {
-      // Set canvas dimensions to full viewport
-      canvas.width = window.innerWidth;
-      canvas.height = window.innerHeight;
+      // Get actual screen dimensions
+      const screenWidth = window.innerWidth;
+      const screenHeight = window.innerHeight;
       
-      // Update camera world dimensions if needed
-      // The CSS handles the visual sizing, but we need proper internal resolution
+      // Maintain aspect ratio for game content, don't squish on mobile
+      const targetAspectRatio = 16 / 10; // Preferred game aspect ratio
+      const screenAspectRatio = screenWidth / screenHeight;
+      
+      let gameWidth, gameHeight;
+      
+      if (screenAspectRatio > targetAspectRatio) {
+        // Screen is wider than target - fit by height
+        gameHeight = screenHeight;
+        gameWidth = gameHeight * targetAspectRatio;
+      } else {
+        // Screen is taller than target - fit by width
+        gameWidth = screenWidth;
+        gameHeight = gameWidth / targetAspectRatio;
+      }
+      
+      // Set canvas to full screen for input handling
+      canvas.width = screenWidth;
+      canvas.height = screenHeight;
+      
+      // Store game rendering dimensions (this is what we'll scale to)
+      const baseGameWidth = 1000;
+      const baseGameHeight = 600;
+      
+      // Calculate scale factor to fit game content in game area
+      const scaleX = gameWidth / baseGameWidth;
+      const scaleY = gameHeight / baseGameHeight;
+      const scale = Math.min(scaleX, scaleY);
+      
+      // Store rendering info
+      window.gameArea = {
+        width: baseGameWidth * scale,
+        height: baseGameHeight * scale,
+        offsetX: (screenWidth - baseGameWidth * scale) / 2,
+        offsetY: (screenHeight - baseGameHeight * scale) / 2,
+        scale: scale
+      };
+      
+      // Update camera world dimensions to base game size
       if (typeof camera !== 'undefined') {
-        camera.worldW = canvas.width;
-        camera.worldH = canvas.height;
+        camera.worldW = baseGameWidth;
+        camera.worldH = baseGameHeight;
       }
       
       // Update joystick size for responsive scaling
@@ -1550,6 +1593,11 @@
       ctx.save();
       ctx.setTransform(1, 0, 0, 1, 0, 0); // Reset transform for UI overlay
       
+      // Apply game area scaling and centering for mobile
+      const gameArea = window.gameArea || { offsetX: 0, offsetY: 0, scale: 1 };
+      ctx.translate(gameArea.offsetX, gameArea.offsetY);
+      ctx.scale(gameArea.scale, gameArea.scale);
+      
       ctx.fillStyle = "rgba(0, 0, 0, 0.7)";
       ctx.fillRect(10, 10, 280, 120);
       
@@ -1874,9 +1922,11 @@
       if (begin == true && beginCount != true && waitClick == true && cinematicTime >= cinematicTotalDuration && textAnimActive) {
         // Dynamic title based on level
         const titleText = mazeLevel === 1 ? "ShuffleRunner" : `Level: ${currentMazeSize}x${currentMazeSize}`;
+        const centerX = 500; // Base game width / 2
+        const centerY = 300; // Base game height / 2
         
         // Tech-y animated title with aesthetic colors
-        renderAnimatedText(ctx, titleText, canvas.width/2, canvas.height/2, textAnimStartTime, currentTime, 60, "aesthetic");
+        renderAnimatedText(ctx, titleText, centerX, centerY, textAnimStartTime, currentTime, 60, "aesthetic");
         
         // Show "Click to Start" with RGB flashing after title animation
         const titleDelay = 2000; // Show after title animation (reduced for faster reveal)
@@ -1886,11 +1936,11 @@
           const pulseScale = 1 + Math.sin(pulseTime * 3) * 0.15; // pulse between 0.85x and 1.15x
           
           ctx.save();
-          ctx.translate(canvas.width/2, canvas.height/2 + 120);
+          ctx.translate(centerX, centerY + 120);
           ctx.scale(pulseScale, pulseScale);
-          ctx.translate(-canvas.width/2, -(canvas.height/2 + 120));
+          ctx.translate(-centerX, -(centerY + 120));
           
-          renderAnimatedText(ctx, "Click to Start", canvas.width/2, canvas.height/2 + 120, textAnimStartTime + titleDelay, currentTime, 32, "rgb");
+          renderAnimatedText(ctx, "Click to Start", centerX, centerY + 120, textAnimStartTime + titleDelay, currentTime, 32, "rgb");
           
           ctx.restore();
         }
@@ -1898,7 +1948,8 @@
       
       // Score display in top left corner (always visible during gameplay)
       if (!begin && !lose) {
-        renderScoreDisplay(ctx, gameScore, currentMazeSize, 20, 35, currentTime);
+        const safeMargin = 20;
+        renderScoreDisplay(ctx, gameScore, currentMazeSize, safeMargin, 35, currentTime);
       }
       
       // Show score celebration when completing a maze with extra juice
@@ -1907,9 +1958,11 @@
         const pulseScale = 1 + Math.sin(celebrationTime * 8) * 0.1;
         
         ctx.save();
-        ctx.translate(canvas.width/2, canvas.height/2);
+        const centerX = 500; // Base game center
+        const centerY = 300;
+        ctx.translate(centerX, centerY);
         ctx.scale(pulseScale, pulseScale);
-        ctx.translate(-canvas.width/2, -canvas.height/2);
+        ctx.translate(-centerX, -centerY);
         
         // Multi-layer glow effect for celebration
         for (let i = 0; i < 4; i++) {
@@ -1918,22 +1971,24 @@
           ctx.font = "48px 'Nova Square', monospace";
           ctx.textAlign = "center";
           ctx.fillStyle = `rgba(0, 255, 255, ${1 - i * 0.2})`;
-          ctx.fillText(`+100 Points!`, canvas.width/2, canvas.height/2 - 50);
+          ctx.fillText(`+100 Points!`, centerX, centerY - 50);
         }
         
         ctx.shadowBlur = 0;
         ctx.font = "36px 'Nova Square', monospace";
         ctx.fillStyle = "#00FF00";
-        ctx.fillText(`Score: ${gameScore}`, canvas.width/2, canvas.height/2 + 10);
-        ctx.fillText(`Level ${mazeLevel}`, canvas.width/2, canvas.height/2 + 60);
+        ctx.fillText(`Score: ${gameScore}`, centerX, centerY + 10);
+        ctx.fillText(`Level ${mazeLevel}`, centerX, centerY + 60);
         
         ctx.restore();
       }
       
       //console.log(waitClick)
       if (begin != true && lose == false && !transitioningToNext) {
-        // Juicy circular timer in top right
-        renderJuicyTimer(ctx, Wait - seconds, currentShuffleTime, canvas.width - 50, 50);
+        // Juicy circular timer in top right (with safe area)
+        const timerX = 1000 - 50; // Base game width - margin
+        const timerY = 50;
+        renderJuicyTimer(ctx, Wait - seconds, currentShuffleTime, timerX, timerY);
       }
       if (Wait < 0) {
         if (!showingLeaderboard) {
@@ -1969,10 +2024,12 @@
         ctx.font = "60px 'Nova Square', monospace";
         ctx.textAlign = "center";
         ctx.fillStyle = "#FF0000";
+        const centerX = 500;
+        const centerY = 300;
         if (CountDown >= 1) {
-          ctx.fillText(Math.floor(CountDown), canvas.width/2, canvas.height/2);
+          ctx.fillText(Math.floor(CountDown), centerX, centerY);
         } else if (CountDown <= 0 || CountDown > -1) {
-          ctx.fillText("GO!", canvas.width/2, canvas.height/2);
+          ctx.fillText("GO!", centerX, centerY);
           Wait = currentShuffleTime; // Start with the current shuffle time
           begin = false;
           // Ensure normal speed when gameplay starts
