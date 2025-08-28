@@ -388,6 +388,10 @@ class GameCore {
         this.showingScore = false;
         this.pelletsSpawned = false;
         this.gameState = "cinematic";
+
+        // Reset the main shuffle timer duration for the new level
+        this.Wait = this.currentShuffleTime;
+
         this.systems.camera.setMazeSize(this.currentMazeSize);
         this.systems.camera.startCinematic();
         this.generateNewMaze();
@@ -420,6 +424,7 @@ class GameCore {
         this.mazeLevel = 1;
         this.currentMazeSize = this.baseMazeSize;
         this.currentShuffleTime = this.baseShuffleTime;
+        this.Wait = this.baseShuffleTime; // Also reset Wait timer duration
         this.transitioningToNext = false;
         this.showingScore = false;
         this.pelletsSpawned = false;
