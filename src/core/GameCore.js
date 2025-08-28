@@ -86,7 +86,9 @@ class GameCore {
         );
         this.systems.horror.addEffect(new HorrorAudio(this.systems.horror));
         this.systems.horror.addEffect(new HorrorCRT(this.systems.horror));
-        this.systems.horror.addEffect(new HorrorCorruptMaze(this.systems.horror));
+        this.systems.horror.addEffect(
+            new HorrorCorruptMaze(this.systems.horror),
+        );
         this.systems.horror.addEffect(new HorrorGhost(this.systems.horror));
 
         // Connect horror system to audio system for scary audio
@@ -260,12 +262,20 @@ class GameCore {
         this.entities.player.update(playerState);
 
         // Update camera to follow player
-        this.systems.camera.followPlayer(this.entities.player, dt, this.shuffleTimeRemaining);
+        this.systems.camera.followPlayer(
+            this.entities.player,
+            dt,
+            this.shuffleTimeRemaining,
+        );
 
         // Update any active ghosts and check for collisions
         for (let i = this.activeGhosts.length - 1; i >= 0; i--) {
             const ghost = this.activeGhosts[i];
-            const collided = ghost.update(dt, this.entities.player, this.systems.camera);
+            const collided = ghost.update(
+                dt,
+                this.entities.player,
+                this.systems.camera,
+            );
             if (collided) {
                 this.handleGhostCollision(ghost);
                 // Stop the loop for this frame since a shuffle was triggered
@@ -318,7 +328,7 @@ class GameCore {
         this.entities.player.render(this.ctx);
 
         // Render any active ghosts
-        this.activeGhosts.forEach(ghost => ghost.render(this.ctx));
+        this.activeGhosts.forEach((ghost) => ghost.render(this.ctx));
 
         // Render effects
         this.systems.effects.render(this.ctx, currentTime);
@@ -474,7 +484,7 @@ class GameCore {
     checkShuffleTimer() {
         if (this.shuffleTimeRemaining <= 0 && !this.transitioningToNext) {
             // Check if the next shuffle would end the game
-            if ((this.Wait - this.SHUFFLE_TIME_DECREASE) < 0) {
+            if (this.Wait - this.SHUFFLE_TIME_DECREASE < 0) {
                 this.gameOver();
             } else {
                 this.shuffleMaze();
@@ -512,18 +522,25 @@ class GameCore {
     }
 
     handleGhostCollision(ghost) {
-        console.log("[GameCore] Player collided with ghost! Applying new consequences.");
+        console.log(
+            "[GameCore] Player collided with ghost! Applying new consequences.",
+        );
 
         // 1. Subtract points and show toaster text
         this.gameScore = Math.max(0, this.gameScore - 100);
         const playerPos = this.entities.player.getCenter();
-        this.systems.effects.addPopup("-100", playerPos.x, playerPos.y, "score");
+        this.systems.effects.addPopup(
+            "-100",
+            playerPos.x,
+            playerPos.y,
+            "score",
+        );
 
         // 2. Shake the screen
         this.systems.camera.addCameraKick(2.5);
 
         // 3. Play collision sound
-        this.systems.audio.sfxBuzz();
+        // this.systems.audio.sfxBuzz();
 
         // 4. Clean up the ghost's resources (e.g., audio)
         ghost.destroy();
