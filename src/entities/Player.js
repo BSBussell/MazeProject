@@ -70,7 +70,12 @@ class Player {
         }
         
         // Render player
-        ctx.fillStyle = "#0000FF";
+        const pelletSystem = window.game ? window.game.systems.pellets : null;
+        if (pelletSystem && pelletSystem.isSpeedBoosted()) {
+            ctx.fillStyle = "#6699FF"; // Lighter blue for speed boost
+        } else {
+            ctx.fillStyle = "#0000FF"; // Standard blue
+        }
         ctx.fillRect(this.x, this.y, this.width, this.height);
     }
     

@@ -1,13 +1,13 @@
 class Ghost {
-    constructor(path, isClone = false) {
+    constructor(path, isClone = false, startPos = null) {
         this.path = path;
         this.isClone = isClone;
         this.pathIndex = 0;
-        this.cloneDelay = 45; // 45 frames of delay
+        this.cloneDelay = 90; // Increased delay to 90 frames
 
-        const startPos = this.isClone ? (window.game.entities.player || {x: 0, y: 0}) : (path && path.length > 0 ? path[0] : {x: 0, y: 0});
-        this.x = startPos.x;
-        this.y = startPos.y;
+        const initialPos = startPos || (this.isClone ? (window.game.entities.player || {x: 0, y: 0}) : (path && path.length > 0 ? path[0] : {x: 0, y: 0}));
+        this.x = initialPos.x;
+        this.y = initialPos.y;
 
         this.width = 15;
         this.height = 15;
@@ -18,7 +18,7 @@ class Ghost {
         this.ambientSound.loop = true;
         this.ambientSound.volume = 0; // Start silent
         this.targetVolume = 0;
-        this.maxVolume = 0.25;
+        this.maxVolume = 0.15; // Quieter ghost sound
         this.fadeSpeed = 2.0; // Volume change per second
 
         // Start playing the sound immediately, but it's silent.
@@ -127,12 +127,11 @@ class Ghost {
             return;
         }
 
-
-        // Render clones in a different color for debugging/verification
+        // Render clones in a different color
         if (this.isClone) {
-            ctx.fillStyle = "rgba(255, 0, 0, 0.6)"; // Transparent red
+            ctx.fillStyle = "rgba(150, 0, 255, 0.5)"; // Transparent purple for clones
         } else {
-            ctx.fillStyle = "rgba(0, 0, 255, 0.5)"; // Transparent blue
+            ctx.fillStyle = "rgba(0, 0, 255, 0.5)"; // Transparent blue for regular ghosts
         }
 
         ctx.fillRect(this.x, this.y, this.width, this.height);

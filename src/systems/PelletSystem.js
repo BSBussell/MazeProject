@@ -219,6 +219,11 @@ class PelletSystem {
         this.comboCount = 0;
         this.comboMul = 1.0;
         this.comboWindowUntil = 0;
+
+        // Also ensure the player's speed is reset in the physics system
+        if (window.game && window.game.systems.physics) {
+            window.game.systems.physics.configure({ MAX_SPEED: 300 });
+        }
     }
 
     getComboInfo() {

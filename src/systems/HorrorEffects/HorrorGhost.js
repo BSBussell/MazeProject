@@ -6,7 +6,7 @@ class HorrorGhost extends HorrorEffect {
     }
 
     onMazeReshuffle(maze) {
-        const game = window.game; // Access the global game core
+        const game = window.game;
         if (!game) return;
 
         // 1. Despawn any active cosmic clones from the PREVIOUS round.
@@ -21,50 +21,63 @@ class HorrorGhost extends HorrorEffect {
 
         // 2. Spawn new ghosts for the CURRENT round.
         const intensity = this.system.getIntensity();
-        if (intensity <= this.triggerIntensity || game.playerPaths.length === 0) {
+        if (intensity <= this.triggerIntensity) {
             return;
         }
 
         const baseCost = this.cost;
         let numActiveGhosts = game.activeGhosts.length;
 
-        // Loop to allow multiple ghosts to spawn, with diminishing costs
         while (true) {
-            // Calculate spawn cost with diminishing returns
             const spawnCost = numActiveGhosts > 0 ? baseCost / numActiveGhosts : baseCost;
 
-            // Check if we can afford to spawn and if a random chance passes
             if (this.system.horrorLevel >= spawnCost && Math.random() < 0.4) {
                 console.log(`[HorrorGhost] Spawning ghost (cost: ${spawnCost.toFixed(3)}). Total ghosts: ${numActiveGhosts + 1}`);
                 this.system.horrorLevel -= spawnCost;
 
-                let ghost;
-                // 20% chance to spawn a "cosmic clone" that follows the player
-                if (Math.random() < 0.2) {
-                    console.log("[HorrorGhost] Spawning a COSMIC CLONE!");
-                    ghost = new Ghost(null, true); // No path, isClone = true
-                } else {
-                    // Select a random path from the stored paths
-                    const pathIndex = Math.floor(Math.random() * game.playerPaths.length);
+                const spawnPoint = this.findSafeSpawnPoint(game, maze);
+                if (!spawnPoint) {
+                    console.warn("[HorrorGhost] Could not find a safe spawn point.");
+                    continue; // Try again next time if no spot found
+                }
 
-                    // Remove the used path to prevent multiple ghosts from following the exact same track
-                    const chosenPath = game.playerPaths.splice(pathIndex, 1)[0];
-                    ghost = new Ghost(chosenPath, false);
+                let ghost;
+                if (Math.random() < 0.2 && game.playerPaths.length > 0) {
+                    console.log("[HorrorGhost] Spawning a COSMIC CLONE!");
+                    ghost = new Ghost(null, true, spawnPoint);
+                } else {
+                    if (game.playerPaths.length === 0) break; // No paths for regular ghosts
+                    const chosenPath = game.playerPaths.splice(0, 1)[0]; // Use oldest path
+                    ghost = new Ghost(chosenPath, false, spawnPoint);
                 }
 
                 game.activeGhosts.push(ghost);
-
-                numActiveGhosts++; // Increment for the next iteration's cost calculation
-
-                // If we run out of paths, stop.
-                if (game.playerPaths.length === 0) {
-                    break;
-                }
+                numActiveGhosts++;
             } else {
-                // Stop if we can't afford it or fail the chance roll
                 break;
             }
         }
+    }
+
+    findSafeSpawnPoint(game, maze) {
+        const player = game.entities.player;
+        const mazeSystem = game.systems.maze;
+        const playerTileX = Math.floor(player.x / 25);
+        const playerTileY = Math.floor(player.y / 25);
+
+        // Search in an expanding radius around the player
+        for (let radius = 3; radius < 10; radius++) {
+            for (let i = 0; i < 10; i++) { // Try 10 random positions at this radius
+                const angle = Math.random() * 2 * Math.PI;
+                const checkX = playerTileX + Math.round(radius * Math.cos(angle));
+                const checkY = playerTileY + Math.round(radius * Math.sin(angle));
+
+                if (!mazeSystem.isSolid(checkY, checkX)) {
+                    return { x: checkX * 25 + 7.5, y: checkY * 25 + 7.5 };
+                }
+            }
+        }
+        return null; // No safe spot found
     }
 }
 
