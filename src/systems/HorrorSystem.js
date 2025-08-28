@@ -66,16 +66,16 @@ class HorrorSystem {
     }
 
     // Call when map reshuffles (+0.04 horror, halved from 0.08)
-    onMapReshuffle() {
+    onMapReshuffle(maze) {
         this.horrorLevel = Math.min(1.0, this.horrorLevel + 0.04);
         this.totalMapEvents++;
         this.checkForRelief();
 
-        // Notify each horror effect (no system param, effect uses this.system)
+        // Notify each horror effect, now passing the maze data
         this.effects.forEach((effect) => {
             try {
                 if (typeof effect.onMazeReshuffle === "function")
-                    effect.onMazeReshuffle();
+                    effect.onMazeReshuffle(maze);
             } catch (e) {
                 console.warn("[HorrorSystem] effect onMazeReshuffle failed", e);
             }

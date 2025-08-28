@@ -3,15 +3,15 @@ class HorrorAudio extends HorrorEffect {
         super(system);
 
         this.musicIsOff = false;
-        this.lastSoundPlayTime = -Infinity; // use a unified timebase; allows immediate first play if needed
+        this.lastSoundPlayTime = -Infinity;
 
-        this.soundCooldownMin = 25;
-        this.soundCooldownMax = 60;
-        this.soundCooldown = 35; // Cooldown in seconds between ambient sounds
+        // Base cooldown range in seconds. This will be scaled by horror intensity.
+        this.soundCooldownMin = 8;  // Min seconds between sounds at high intensity
+        this.soundCooldownMax = 45; // Max seconds between sounds at low intensity
+        this.soundCooldown = this.soundCooldownMax;
 
         this.soundVolume = 0.65;
 
-        // Array of scary files
         this.scaryAmbienceFiles = [
             "assets/scary.mp3",
             "assets/scary_2.mp3",
@@ -21,11 +21,6 @@ class HorrorAudio extends HorrorEffect {
         ];
         this.scaryAmbienceWeights = [0.1, 0.26, 0.1, 0.27, 0.27];
 
-        // Optional per-file play probabilities (weights). Must sum to ~1.0; if not, we normalize.
-        // Default: equal probability per file.
-        // this.scaryAmbienceWeights = new Array(this.scaryAmbienceFiles.length).fill(1 / this.scaryAmbienceFiles.length);
-
-        // Create sound variable for each scary file
         this.scaryAmbienceSounds = this.scaryAmbienceFiles.map((file) => {
             const sound = new Audio(file);
             sound.loop = false;
@@ -33,150 +28,101 @@ class HorrorAudio extends HorrorEffect {
             return sound;
         });
 
-        // Pre-bind helper for weighted selection
         this._pickWeightedIndex = (weights) => {
-            // Normalize defensively
-            const w =
-                Array.isArray(weights) &&
-                weights.length === this.scaryAmbienceFiles.length
-                    ? weights.slice()
-                    : new Array(this.scaryAmbienceFiles.length).fill(
-                          1 / this.scaryAmbienceFiles.length,
-                      );
-            const sum =
-                w.reduce((a, b) => a + (isFinite(b) ? Math.max(0, b) : 0), 0) ||
-                1;
+            const w = Array.isArray(weights) && weights.length === this.scaryAmbienceFiles.length
+                ? weights.slice()
+                : new Array(this.scaryAmbienceFiles.length).fill(1 / this.scaryAmbienceFiles.length);
+            const sum = w.reduce((a, b) => a + (isFinite(b) ? Math.max(0, b) : 0), 0) || 1;
             for (let i = 0; i < w.length; i++) w[i] = Math.max(0, w[i]) / sum;
             let r = Math.random();
             for (let i = 0; i < w.length; i++) {
                 if ((r -= w[i]) <= 0) return i;
             }
-            return w.length - 1; // fallback
+            return w.length - 1;
         };
     }
 
-    onNewLevel(system, level) {
-        // accept the passed system but also keep this.system for compatibility
-        this.system = this.system || system;
-        console.log(`[HorrorAudio] New level started: ${level}`);
-
-        // Turn off all ambient sounds
+    onNewLevel(level) {
         this.scaryAmbienceSounds.forEach((sound) => {
             sound.pause();
             sound.currentTime = 0;
         });
-        if (this.system.horrorLevel < 0.4) {
-            this.musicIsOff = false;
-        }
+        // Music state will be handled by the update loop based on horror level
     }
 
-    onMazeReshuffle(system) {
-        // accept the passed system but also keep this.system for compatibility
-        this.system = this.system || system;
-        console.log("[HorrorAudio] Maze reshuffled.");
-
-        // If we haven't turned music off yet and horror level is high enough
-        // Turn off the music and start ambient count down
-        if (!this.musicIsOff && this.system.horrorLevel > 0.4) {
-            this.system.audioSystem.stopBackgroundMusic();
-            this.musicIsOff = true;
-
-            this.soundCooldown =
-                Math.random() *
-                    (this.soundCooldownMax - this.soundCooldownMin) +
-                this.soundCooldownMin;
-
-            // JavaScript is just such a cool language dontcha think? Don't you agree? Javascript is so cool oo wowie
-            const now =
-                this.system && typeof this.system.timeElapsed === "number"
-                    ? this.system.timeElapsed
-                    : 0;
-            this.lastSoundPlayTime = now;
-
-            // Otherwise if we have turned music off and horror level is low enough
-            // Turn on the music and stop ambient count down
-        } else if (this.musicIsOff && this.system.horrorLevel < 0.4) {
-            this.system.audioSystem.startBackgroundMusic();
-        }
+    onMazeReshuffle() {
+        // No longer need to manage music state here; update() handles it.
     }
 
     update(intensity, dt) {
-        // Play ambience noise after we've turned off music
-        // And after cooldown has passed
-        // And if we're 0.6 of the way through time based horror
-        // And on a 20% chance
+        const now = this.system.elapsed;
+
+        // Dynamically manage background music based on horror intensity
+        if (intensity > 0.4 && !this.musicIsOff) {
+            this.system.audioSystem.stopBackgroundMusic();
+            this.musicIsOff = true;
+            console.log("[HorrorAudio] Music stopped due to high intensity.");
+        } else if (intensity <= 0.4 && this.musicIsOff) {
+            this.system.audioSystem.startBackgroundMusic();
+            this.musicIsOff = false;
+            console.log("[HorrorAudio] Music restarted due to low intensity.");
+        }
+
+        // Only play ambient sounds if the music is off
         if (this.musicIsOff) {
-            const now =
-                typeof this.system.timeElapsed === "number"
-                    ? this.system.timeElapsed
-                    : 0;
-            if (
-                now - this.lastSoundPlayTime > this.soundCooldown &&
-                intensity > 0.6 &&
-                Math.random() < 0.2
-            ) {
-                console.log("[HorrorAudio] Playing scary sound.");
-                this.playRandomScarySound(now);
+            if (now - this.lastSoundPlayTime > this.soundCooldown) {
+                console.log(`[HorrorAudio] Cooldown finished. Playing scary sound. Intensity: ${intensity.toFixed(2)}`);
+                this.playRandomScarySound(now, intensity);
             }
         }
     }
 
-    playRandomScarySound(now) {
+    playRandomScarySound(now, intensity) {
         const randomIndex = this._pickWeightedIndex(this.scaryAmbienceWeights);
         const sound = this.scaryAmbienceSounds[randomIndex];
-        this.soundCooldown =
-            Math.random() * (this.soundCooldownMax - this.soundCooldownMin) +
-            this.soundCooldownMin;
-        this.lastSoundPlayTime = typeof now === "number" ? now : 0;
-        sound
-            .play()
-            .catch((e) => console.error("Error playing scary sound:", e));
-        console.log("[HorrorAudio] Playing ambient horror sound.");
+
+        // As intensity approaches 1, cooldown approaches soundCooldownMin.
+        // As intensity approaches 0.4 (the minimum to be here), cooldown approaches soundCooldownMax.
+        const intensityRange = 1.0 - 0.4;
+        const effectiveIntensity = Math.max(0, (intensity - 0.4) / intensityRange);
+
+        const cooldownRange = this.soundCooldownMax - this.soundCooldownMin;
+        this.soundCooldown = this.soundCooldownMax - (effectiveIntensity * cooldownRange * (0.5 + Math.random() * 0.5));
+
+        this.lastSoundPlayTime = now;
+        sound.play().catch((e) => console.error("Error playing scary sound:", e));
+        console.log(`[HorrorAudio] Playing ambient sound. Next sound in ~${this.soundCooldown.toFixed(1)}s.`);
     }
 
-    /**
-     * Set per-file play probabilities. You can pass either:
-     *  - an array aligned to scaryAmbienceFiles (e.g., [0.3, 0.3, 0.4])
-     *  - an object keyed by filename (e.g., {"assets/scary.mp3":0.3, ...})
-     * Values will be normalized to sum to 1.
-     */
     setAmbienceWeights(weights) {
         if (Array.isArray(weights)) {
             if (weights.length === this.scaryAmbienceFiles.length) {
                 this.scaryAmbienceWeights = weights.slice();
             } else {
-                console.warn(
-                    "[HorrorAudio] setAmbienceWeights: array length mismatch; ignoring.",
-                );
+                console.warn("[HorrorAudio] setAmbienceWeights: array length mismatch; ignoring.");
             }
-            return;
-        }
-        if (weights && typeof weights === "object") {
-            const arr = this.scaryAmbienceFiles.map(
-                (f) => Number(weights[f]) || 0,
-            );
-            const hasAny = arr.some((v) => v > 0);
-            if (hasAny) {
+        } else if (weights && typeof weights === "object") {
+            const arr = this.scaryAmbienceFiles.map((f) => Number(weights[f]) || 0);
+            if (arr.some((v) => v > 0)) {
                 this.scaryAmbienceWeights = arr;
             } else {
-                console.warn(
-                    "[HorrorAudio] setAmbienceWeights: object provided but no valid values; ignoring.",
-                );
+                console.warn("[HorrorAudio] setAmbienceWeights: object provided but no valid values; ignoring.");
             }
-            return;
+        } else {
+            console.warn("[HorrorAudio] setAmbienceWeights: unsupported type; ignoring.");
         }
-        console.warn(
-            "[HorrorAudio] setAmbienceWeights: unsupported type; ignoring.",
-        );
     }
 
     onGameOver() {
         console.log("[HorrorAudio] Game Over");
         this.musicIsOff = false;
+        this.scaryAmbienceSounds.forEach(sound => {
+            sound.pause();
+            sound.currentTime = 0;
+        });
     }
 }
 
-// Also expose globally for the existing codebase
 if (typeof window !== "undefined") {
     window.HorrorAudio = HorrorAudio;
 }

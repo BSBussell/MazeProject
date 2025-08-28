@@ -48,9 +48,9 @@ class HorrorEffect {
 
     /**
      * Called when the maze is reshuffled.
-     * Use this.system for the system reference.
+     * @param {object} maze - The new maze data.
      */
-    onMazeReshuffle() {
+    onMazeReshuffle(maze) {
         // To be implemented by subclasses
     }
 }

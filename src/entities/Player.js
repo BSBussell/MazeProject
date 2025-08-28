@@ -10,6 +10,9 @@ class Player {
         this.width = 15;
         this.height = 15;
         
+        // Path recording for ghost
+        this.path = [];
+
         // Trail system
         this.trail = [];
         this.TRAIL_MAX = 6;
@@ -24,6 +27,9 @@ class Player {
         this.vx = physicsState.vx;
         this.vy = physicsState.vy;
         
+        // Record current position for ghost replay
+        this.path.push({ x: this.x, y: this.y });
+
         // Update trail system
         this.updateTrail(0.016); // Approximate 60fps
     }
@@ -89,6 +95,7 @@ class Player {
         this.vy = 0;
         this.trail = [];
         this.trailEmitT = 0;
+        this.path = []; // Reset path on new level/restart
     }
     
     moveToSafePosition(mazeSystem) {

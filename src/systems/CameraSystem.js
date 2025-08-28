@@ -134,7 +134,7 @@ class CameraSystem {
         
         // This logic now mirrors the UI timing logic for perfect synchronization.
         const elapsed = ((new Date() - window.game.startDate) / 1000) * window.game.shuffleTimerSpeed;
-        const timeRemaining = Math.floor(window.game.Wait - elapsed);
+        const timeRemaining = Math.ceil(window.game.Wait - elapsed);
 
         // Apply zoom out effect for last 3 seconds and play sound
         if (timeRemaining <= 3 && timeRemaining > 0) {

@@ -39,6 +39,10 @@ class GameCore {
         this.systems = {};
         this.entities = {};
 
+        // Ghost-related properties
+        this.playerPaths = []; // Array to store historical player paths
+        this.activeGhosts = []; // Array to manage active ghost entities
+
         // Event hooks for easy extension
         this.hooks = {
             onGameStart: [],
@@ -82,6 +86,8 @@ class GameCore {
         );
         this.systems.horror.addEffect(new HorrorAudio(this.systems.horror));
         this.systems.horror.addEffect(new HorrorCRT(this.systems.horror));
+        this.systems.horror.addEffect(new HorrorCorruptMaze(this.systems.horror));
+        this.systems.horror.addEffect(new HorrorGhost(this.systems.horror));
 
         // Connect horror system to audio system for scary audio
         this.systems.horror.setAudioSystem(this.systems.audio);
@@ -100,9 +106,9 @@ class GameCore {
             }
         });
 
-        this.addHook("onMazeReshuffle", () => {
+        this.addHook("onMazeReshuffle", (maze) => {
             try {
-                this.systems.horror.onMapReshuffle();
+                this.systems.horror.onMapReshuffle(maze);
             } catch (e) {
                 console.error("Horror hook error (reshuffle):", e);
             }
@@ -254,9 +260,15 @@ class GameCore {
         // Update camera to follow player
         this.systems.camera.followPlayer(this.entities.player, dt);
 
+        // Update any active ghosts
+        this.activeGhosts.forEach(ghost => ghost.update(dt));
+
         // Pellet collision checking is now self-contained in PelletSystem,
         // including triggering the onPelletCollected hook.
         this.systems.pellets.checkCollisions(this.entities.player);
+
+        // Check for collision with ghosts
+        this.checkGhostCollisions();
 
         // Check win condition
         if (this.checkWinCondition()) {
@@ -297,6 +309,9 @@ class GameCore {
 
         // Render player
         this.entities.player.render(this.ctx);
+
+        // Render any active ghosts
+        this.activeGhosts.forEach(ghost => ghost.render(this.ctx));
 
         // Render effects
         this.systems.effects.render(this.ctx, currentTime);
@@ -427,6 +442,7 @@ class GameCore {
         }
 
         this.triggerHook("onMazeGenerated", maze, this.mazeLevel);
+        return maze;
     }
 
     checkWinCondition() {
@@ -458,14 +474,19 @@ class GameCore {
         this.startDate = new Date();
         this.Wait -= this.SHUFFLE_TIME_DECREASE;
 
-        this.triggerHook("onMazeReshuffle");
+        // Store the last path for the ghost and reset the player's current path
+        if (this.entities.player && this.entities.player.path.length > 0) {
+            this.playerPaths.push([...this.entities.player.path]);
+            this.entities.player.path = [];
+        }
 
         // Preserve player position
         const currentState = this.systems.physics.getPose();
         const currentTileX = Math.floor(currentState.x / 25);
         const currentTileY = Math.floor(currentState.y / 25);
 
-        this.generateNewMaze();
+        let maze = this.generateNewMaze();
+        this.triggerHook("onMazeReshuffle", maze);
 
         // Ensure player isn't in a wall after maze regen
         let attempts = 0;
@@ -473,7 +494,10 @@ class GameCore {
             this.systems.maze.isSolid(currentTileY, currentTileX) &&
             attempts < 10
         ) {
-            this.generateNewMaze();
+            maze = this.generateNewMaze();
+            // We don't trigger the hook again here, as this is part of the same shuffle event.
+            // The final maze state is what matters. If corruption happens, it should happen
+            // on the *first* generated maze of the shuffle sequence.
             attempts++;
         }
 
@@ -483,6 +507,46 @@ class GameCore {
         }
 
         this.systems.physics.setPose(currentState.x, currentState.y);
+    }
+
+    checkGhostCollisions() {
+        if (this.activeGhosts.length === 0) {
+            return;
+        }
+
+        const playerBounds = this.entities.player.getCollisionBounds();
+
+        for (let i = this.activeGhosts.length - 1; i >= 0; i--) {
+            const ghost = this.activeGhosts[i];
+            if (!ghost.active) continue;
+
+            const ghostBounds = ghost.getCollisionBounds();
+
+            // AABB collision check
+            if (
+                playerBounds.x < ghostBounds.x + ghostBounds.width &&
+                playerBounds.x + playerBounds.width > ghostBounds.x &&
+                playerBounds.y < ghostBounds.y + ghostBounds.height &&
+                playerBounds.y + playerBounds.height > ghostBounds.y
+            ) {
+                console.log("[GameCore] Player collided with ghost!");
+
+                // Increase horror
+                this.systems.horror.horrorLevel = Math.min(1.0, this.systems.horror.horrorLevel + 0.1);
+
+                // Play a sound
+                this.systems.audio.sfxBuzz();
+
+                // Remove the ghost
+                this.activeGhosts.splice(i, 1);
+
+                // Trigger an immediate reshuffle
+                this.shuffleMaze();
+
+                // Stop checking since a shuffle has been triggered
+                break;
+            }
+        }
     }
 
     getUIData() {
