@@ -27,8 +27,8 @@ class GameCore {
         // Timing
         this.baseShuffleTime = this.BASE_SHUFFLE_TIME;
         this.currentShuffleTime = this.baseShuffleTime;
-        this.startDate = new Date();
-        this.Wait = this.baseShuffleTime;
+        this.shuffleTimeRemaining = 0; // The single source of truth for the shuffle timer
+        this.Wait = this.baseShuffleTime; // Represents the *duration* of the next round
 
         // Flags
         this.transitioningToNext = false;
@@ -244,12 +244,14 @@ class GameCore {
         // Handle countdown before gameplay
         if (this.systems.ui.updateCountdown(dt * this.countdownSpeed)) {
             this.gameState = "playing";
-            this.startDate = new Date();
-            this.Wait = this.currentShuffleTime;
+            this.shuffleTimeRemaining = this.currentShuffleTime;
         }
     }
 
     updatePlaying(dt, currentTime) {
+        // Decrement the unified shuffle timer
+        this.shuffleTimeRemaining -= dt * this.shuffleTimerSpeed;
+
         // Main gameplay logic
         const input = this.systems.input.getGameInput();
 
@@ -258,7 +260,7 @@ class GameCore {
         this.entities.player.update(playerState);
 
         // Update camera to follow player
-        this.systems.camera.followPlayer(this.entities.player, dt);
+        this.systems.camera.followPlayer(this.entities.player, dt, this.shuffleTimeRemaining);
 
         // Update any active ghosts
         this.activeGhosts.forEach(ghost => ghost.update(dt));
@@ -275,13 +277,8 @@ class GameCore {
             this.completeLevel();
         }
 
-        // Check shuffle timer
+        // Check shuffle timer (which now also handles game over)
         this.checkShuffleTimer();
-
-        // Check game over
-        if (this.Wait < 0) {
-            this.gameOver();
-        }
     }
 
     updateGameOver(dt, currentTime) {
@@ -460,19 +457,19 @@ class GameCore {
     }
 
     checkShuffleTimer() {
-        const endTime = new Date();
-        const elapsed =
-            ((endTime - this.startDate) / 1000) * this.shuffleTimerSpeed;
-        const seconds = Math.floor(elapsed);
-
-        if (seconds >= this.Wait && !this.transitioningToNext) {
-            this.shuffleMaze();
+        if (this.shuffleTimeRemaining <= 0 && !this.transitioningToNext) {
+            // Check if the next shuffle would end the game
+            if ((this.Wait - this.SHUFFLE_TIME_DECREASE) < 0) {
+                this.gameOver();
+            } else {
+                this.shuffleMaze();
+            }
         }
     }
 
     shuffleMaze() {
-        this.startDate = new Date();
         this.Wait -= this.SHUFFLE_TIME_DECREASE;
+        this.shuffleTimeRemaining = this.Wait;
 
         // Store the last path for the ghost and reset the player's current path
         if (this.entities.player && this.entities.player.path.length > 0) {
@@ -554,15 +551,8 @@ class GameCore {
             score: this.gameScore,
             level: this.mazeLevel,
             mazeSize: this.currentMazeSize,
-            timeRemaining: Math.max(
-                0,
-                this.Wait -
-                    Math.floor(
-                        ((new Date() - this.startDate) / 1000) *
-                            this.shuffleTimerSpeed,
-                    ),
-            ),
-            maxTime: this.currentShuffleTime,
+            timeRemaining: Math.max(0, Math.ceil(this.shuffleTimeRemaining)),
+            maxTime: this.Wait, // Use Wait as it represents the current round's duration
             showingScore: this.showingScore,
         };
     }

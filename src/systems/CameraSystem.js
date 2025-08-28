@@ -90,7 +90,7 @@ class CameraSystem {
         this.updateViewport();
     }
     
-    followPlayer(player, dt) {
+    followPlayer(player, dt, shuffleTimeRemaining) {
         const targetX = player.x + this.CAM_FOLLOW_OFFSET.x;
         const targetY = player.y + this.CAM_FOLLOW_OFFSET.y;
         
@@ -108,10 +108,10 @@ class CameraSystem {
         this.moveTo(this.camX, this.camY);
         
         // Update zoom with camera kick effects
-        this.updateCameraZoom();
+        this.updateCameraZoom(shuffleTimeRemaining);
     }
     
-    updateCameraZoom() {
+    updateCameraZoom(shuffleTimeRemaining) {
         let baseZoom = 1000;
         
         // Decay camera kick
@@ -120,7 +120,7 @@ class CameraSystem {
         }
         
         // Apply countdown zoom effect
-        const countdownZoom = this.getCountdownZoom();
+        const countdownZoom = this.getCountdownZoom(shuffleTimeRemaining);
         
         // Apply kick as zoom effect
         const kickScale = 1 + 0.04 * this.camKick;
@@ -128,17 +128,16 @@ class CameraSystem {
         this.zoomTo(finalZoom);
     }
     
-    getCountdownZoom() {
-        // Get time remaining from game
-        if (!window.game || !window.game.systems.ui) return 1.0;
-        
-        // Get the canonical countdown value from the UI system for perfect sync.
-        const timeRemaining = Math.ceil(window.game.systems.ui.countdownValue);
+    getCountdownZoom(shuffleTimeRemaining) {
+        // This zoom is for the *in-game shuffle timer*, not the pre-game countdown.
+        if (shuffleTimeRemaining === undefined) return 1.0;
+
+        const timeRemaining = Math.ceil(shuffleTimeRemaining);
 
         // Apply zoom out effect for last 3 seconds and play sound
         if (timeRemaining <= 3 && timeRemaining > 0) {
             // Play lighter hit sound when countdown second changes
-            if (timeRemaining !== this.lastCountdownSecond && window.game.systems.audio) {
+            if (timeRemaining !== this.lastCountdownSecond && window.game && window.game.systems.audio) {
                 window.game.systems.audio.sfxLighterHit();
                 this.lastCountdownSecond = timeRemaining;
             }
