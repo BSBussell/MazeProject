@@ -75,6 +75,8 @@ class HorrorAudio extends HorrorEffect {
         this.system = this.system || system;
         console.log("[HorrorAudio] Maze reshuffled.");
 
+        // If we haven't turned music off yet and horror level is high enough
+        // Turn off the music and start ambient count down
         if (!this.musicIsOff && this.system.horrorLevel > 0.4) {
             this.system.audioSystem.stopBackgroundMusic();
             this.musicIsOff = true;
@@ -90,12 +92,19 @@ class HorrorAudio extends HorrorEffect {
                     ? this.system.timeElapsed
                     : 0;
             this.lastSoundPlayTime = now;
-        } else if (this.musicIsOff) {
+
+            // Otherwise if we have turned music off and horror level is low enough
+            // Turn on the music and stop ambient count down
+        } else if (this.musicIsOff && this.system.horrorLevel < 0.4) {
             this.system.audioSystem.startBackgroundMusic();
         }
     }
 
     update(intensity, dt) {
+        // Play ambience noise after we've turned off music
+        // And after cooldown has passed
+        // And if we're 0.6 of the way through time based horror
+        // And on a 20% chance
         if (this.musicIsOff) {
             const now =
                 typeof this.system.timeElapsed === "number"

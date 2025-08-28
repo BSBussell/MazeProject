@@ -11,7 +11,7 @@ class HorrorCRT extends HorrorEffect {
 
     onGameStart() {
         // Store original config if the CRT filter is available
-        if (window.crtFilter) {
+        if (window.crtFilter && !this.originalConfig) {
             this.originalConfig = { ...window.crtFilter.config };
         }
     }
@@ -28,14 +28,38 @@ class HorrorCRT extends HorrorEffect {
         }
 
         const config = window.crtFilter.config;
-
         // Smoothly adjust CRT parameters based on horror intensity
         // Values chosen to create a noticeable but not overwhelming effect at max intensity
-        config.staticNoise = this.lerp(this.originalConfig.staticNoise, 0.08, intensity);
-        config.flicker = this.lerp(this.originalConfig.flicker, 0.09, intensity);
-        config.verticalJitter = this.lerp(this.originalConfig.verticalJitter, 0.009, intensity);
-        config.barrelDistortion = this.lerp(this.originalConfig.barrelDistortion, 0.12, intensity);
-        config.signalLoss = this.lerp(this.originalConfig.signalLoss, 0.18, intensity);
+        config.staticNoise = this.lerp(
+            this.originalConfig.staticNoise,
+            0.08,
+            intensity,
+        );
+        config.flicker = this.lerp(
+            this.originalConfig.flicker,
+            0.05,
+            intensity,
+        );
+        config.horizontalTearing = this.lerp(
+            this.originalConfig.horizontalTearing,
+            0.007,
+            intensity,
+        );
+        config.verticalJitter = this.lerp(
+            this.originalConfig.verticalJitter,
+            0.006,
+            intensity,
+        );
+        config.barrelDistortion = this.lerp(
+            this.originalConfig.barrelDistortion,
+            0.12,
+            intensity,
+        );
+        config.signalLoss = this.lerp(
+            this.originalConfig.signalLoss,
+            0.08,
+            intensity,
+        );
     }
 
     onGameOver() {
