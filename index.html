@@ -115,6 +115,7 @@
                         flicker: 0.015,
                         signalLoss: 0.125,
                     });
+                    window.crtFilter = crtFilter; // Expose the filter instance globally
                 }
 
                 if (crtEnabled) {
@@ -181,6 +182,7 @@
         <script src="./src/systems/HorrorEffects/HorrorEffect.js"></script>
         <script src="./src/systems/HorrorEffects/HorrorAudio.js"></script>
         <script src="./src/systems/HorrorEffects/HorrorUI.js"></script>
+        <script src="./src/systems/HorrorEffects/HorrorCRT.js"></script>
 
         <!-- Effects and UI -->
         <script src="./src/effects/EffectsSystem.js"></script>
@@ -205,8 +207,8 @@
     5. Modify configs: window.game.systems.physics.configure({MAX_SPEED: 500})
 
     Example hook usage:
-    window.game.addHook('onPelletCollected', (player) => {
-      console.log('Custom pellet collection logic!');
+    window.game.addHook('onPelletCollected', (player, pellet) => {
+      console.log(`Custom pellet collection logic! Player: ${player}, Pellet Type: ${pellet.type}`);
       // Add your own logic here
     });
 

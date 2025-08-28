@@ -193,9 +193,9 @@ class GameInit {
     setupExampleHooks() {
         // Example hooks that demonstrate how to extend the game
         
-        // Log when pellets are collected
-        this.game.addHook('onPelletCollected', (player) => {
-            GameUtils.debugLog('Pellet collected at:', player.getCenter());
+        // Log when pellets are collected, now with pellet info
+        this.game.addHook('onPelletCollected', (player, pellet) => {
+            GameUtils.debugLog(`Pellet collected: ${pellet.type} at`, player.getCenter());
         });
         
         // Hook to retry audio on game state changes

@@ -39,9 +39,10 @@ class HorrorEffect {
 
     /**
      * Called when the player collects a pellet.
-     * Use this.system for the system reference.
+     * @param {object} player - The player entity.
+     * @param {object} pellet - The pellet that was collected.
      */
-    onPelletCollected(player) {
+    onPelletCollected(player, pellet) {
         // To be implemented by subclasses
     }
 

@@ -81,6 +81,7 @@ class GameCore {
             new HorrorUI(this.systems.horror, this.systems.ui),
         );
         this.systems.horror.addEffect(new HorrorAudio(this.systems.horror));
+        this.systems.horror.addEffect(new HorrorCRT(this.systems.horror));
 
         // Connect horror system to audio system for scary audio
         this.systems.horror.setAudioSystem(this.systems.audio);
@@ -88,9 +89,12 @@ class GameCore {
         // Wire common game hooks to the horror system so events flow through
         // the central hook API (this keeps behaviour consistent with other
         // systems and with user-provided hooks).
-        this.addHook("onPelletCollected", (player) => {
+        // Wire the onPelletCollected hook to the horror system.
+        // The pellet object is now available, but the horror system only needs the player.
+        this.addHook("onPelletCollected", (player, pellet) => {
             try {
-                this.systems.horror.onPelletCollected();
+                // For now, we only pass the player, but the pellet is available for future use.
+                this.systems.horror.onPelletCollected(player, pellet);
             } catch (e) {
                 console.error("Horror hook error (pellet):", e);
             }
@@ -250,10 +254,9 @@ class GameCore {
         // Update camera to follow player
         this.systems.camera.followPlayer(this.entities.player, dt);
 
-        // Check pellet collisions
-        if (this.systems.pellets.checkCollisions(this.entities.player)) {
-            this.triggerHook("onPelletCollected", this.entities.player);
-        }
+        // Pellet collision checking is now self-contained in PelletSystem,
+        // including triggering the onPelletCollected hook.
+        this.systems.pellets.checkCollisions(this.entities.player);
 
         // Check win condition
         if (this.checkWinCondition()) {

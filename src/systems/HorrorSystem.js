@@ -107,15 +107,16 @@ class HorrorSystem {
         );
     }
 
-    onPelletCollected(player) {
-        // Grant 0.025 horror relief
+    onPelletCollected(player, pellet) {
+        // Grant 0.025 horror relief, as before.
+        // The new effects for specific pellets are handled in PelletSystem.
         this.horrorLevel = Math.max(0, this.horrorLevel - 0.025);
 
-        // Notify effects (no system param, effect uses this.system)
+        // Notify effects, passing both player and pellet
         this.effects.forEach((effect) => {
             try {
                 if (typeof effect.onPelletCollected === "function")
-                    effect.onPelletCollected(player);
+                    effect.onPelletCollected(player, pellet);
             } catch (e) {
                 console.warn(
                     "[HorrorSystem] effect onPelletCollected failed",
