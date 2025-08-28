@@ -332,7 +332,7 @@ class UISystem {
             this.textAnimStartTime = currentTime;
         }
 
-        const titleText = "ShuffleRunner";
+        const titleText = "Disorientation";
         // Position title at maze center (world coordinates, not screen coordinates)
         const mazeSize = window.game ? window.game.currentMazeSize : 25;
         const centerX = (mazeSize / 2) * 25; // World X coordinate
