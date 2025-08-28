@@ -134,9 +134,9 @@ class PelletSystem {
                     window.game.gameScore -= 10;
                 }
 
-                // Original time pellet logic
+                // Original time pellet logic, now hooked into the new unified timer
                 if (window.game) {
-                    window.game.startDate = new Date(window.game.startDate.getTime() + 3000);
+                    window.game.shuffleTimeRemaining += 3;
                 }
                 this.triggerPelletEffects(playerX, playerY, "+3s", "#39ff14", 12);
                 break;

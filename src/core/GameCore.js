@@ -262,15 +262,25 @@ class GameCore {
         // Update camera to follow player
         this.systems.camera.followPlayer(this.entities.player, dt, this.shuffleTimeRemaining);
 
-        // Update any active ghosts
-        this.activeGhosts.forEach(ghost => ghost.update(dt));
+        // Update any active ghosts and check for collisions
+        for (let i = this.activeGhosts.length - 1; i >= 0; i--) {
+            const ghost = this.activeGhosts[i];
+            const collided = ghost.update(dt, this.entities.player, this.systems.camera);
+            if (collided) {
+                this.handleGhostCollision(ghost);
+                // Stop the loop for this frame since a shuffle was triggered
+                break;
+            }
+            // Remove inactive ghosts (e.g., path complete), ensuring resources are cleaned up
+            if (!ghost.active) {
+                ghost.destroy();
+                this.activeGhosts.splice(i, 1);
+            }
+        }
 
         // Pellet collision checking is now self-contained in PelletSystem,
         // including triggering the onPelletCollected hook.
         this.systems.pellets.checkCollisions(this.entities.player);
-
-        // Check for collision with ghosts
-        this.checkGhostCollisions();
 
         // Check win condition
         if (this.checkWinCondition()) {
@@ -506,44 +516,26 @@ class GameCore {
         this.systems.physics.setPose(currentState.x, currentState.y);
     }
 
-    checkGhostCollisions() {
-        if (this.activeGhosts.length === 0) {
-            return;
+    handleGhostCollision(ghost) {
+        console.log("[GameCore] Player collided with ghost!");
+
+        // Increase horror
+        this.systems.horror.horrorLevel = Math.min(1.0, this.systems.horror.horrorLevel + 0.1);
+
+        // Play a sound
+        this.systems.audio.sfxBuzz();
+
+        // Clean up the ghost's resources (e.g., audio)
+        ghost.destroy();
+
+        // Find and remove the specific ghost that collided
+        const index = this.activeGhosts.indexOf(ghost);
+        if (index > -1) {
+            this.activeGhosts.splice(index, 1);
         }
 
-        const playerBounds = this.entities.player.getCollisionBounds();
-
-        for (let i = this.activeGhosts.length - 1; i >= 0; i--) {
-            const ghost = this.activeGhosts[i];
-            if (!ghost.active) continue;
-
-            const ghostBounds = ghost.getCollisionBounds();
-
-            // AABB collision check
-            if (
-                playerBounds.x < ghostBounds.x + ghostBounds.width &&
-                playerBounds.x + playerBounds.width > ghostBounds.x &&
-                playerBounds.y < ghostBounds.y + ghostBounds.height &&
-                playerBounds.y + playerBounds.height > ghostBounds.y
-            ) {
-                console.log("[GameCore] Player collided with ghost!");
-
-                // Increase horror
-                this.systems.horror.horrorLevel = Math.min(1.0, this.systems.horror.horrorLevel + 0.1);
-
-                // Play a sound
-                this.systems.audio.sfxBuzz();
-
-                // Remove the ghost
-                this.activeGhosts.splice(i, 1);
-
-                // Trigger an immediate reshuffle
-                this.shuffleMaze();
-
-                // Stop checking since a shuffle has been triggered
-                break;
-            }
-        }
+        // Trigger an immediate reshuffle
+        this.shuffleMaze();
     }
 
     getUIData() {
