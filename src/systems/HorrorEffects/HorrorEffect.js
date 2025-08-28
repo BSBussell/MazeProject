@@ -1,60 +1,60 @@
 // Base class for all horror effects — updated signatures: system is first arg.
 class HorrorEffect {
     constructor(system) {
-        // Keep this for backwards compatibility; system will also be passed into methods.
+        // Store system reference for use in all effect methods.
         this.system = system;
     }
 
     /**
      * Called every frame.
-     * New signature: update(system, intensity, dt, context)
+     * Use this.system for the system reference.
      */
-    update(system, intensity, dt, context) {
+    update(intensity, dt) {
         // To be implemented by subclasses
     }
 
     /**
      * Called when the game starts a new run.
-     * New signature: onGameStart(system)
+     * Use this.system for the system reference.
      */
-    onGameStart(system) {
+    onGameStart() {
         // To be implemented by subclasses
     }
 
     /**
      * Called when a new level begins.
-     * New signature: onNewLevel(system, level)
+     * Use this.system for the system reference.
      */
-    onNewLevel(system, level) {
+    onNewLevel(level) {
         // To be implemented by subclasses
     }
 
     /**
      * Called when the game is over.
-     * New signature: onGameOver(system)
+     * Use this.system for the system reference.
      */
-    onGameOver(system) {
+    onGameOver() {
         // To be implemented by subclasses
     }
 
     /**
      * Called when the player collects a pellet.
-     * New signature: onPelletCollected(system, player)
+     * Use this.system for the system reference.
      */
-    onPelletCollected(system, player) {
+    onPelletCollected(player) {
         // To be implemented by subclasses
     }
 
     /**
      * Called when the maze is reshuffled.
-     * New signature: onMazeReshuffle(system)
+     * Use this.system for the system reference.
      */
-    onMazeReshuffle(system) {
+    onMazeReshuffle() {
         // To be implemented by subclasses
     }
 }
 
 // Also expose globally for the existing codebase that constructs classes directly
-if (typeof window !== 'undefined') {
+if (typeof window !== "undefined") {
     window.HorrorEffect = HorrorEffect;
 }

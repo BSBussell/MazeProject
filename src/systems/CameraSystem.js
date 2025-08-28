@@ -35,7 +35,14 @@ class CameraSystem {
         // Cinematic state
         this.cinematicActive = false;
         this.cinematicTime = 0;
-        this.cinematicTotalDuration = 6.0;
+        this.cinematicTotalDuration = 3.0;
+
+        // Cinematic easing & zoom defaults (configurable)
+        this.cinematicEaseA = { p1x: 0.25, p1y: 0.35, p2x: 0.75, p2y: 0.65 }; // goal → center
+        this.cinematicEaseB = { p1x: 0.25, p1y: 0.35, p2x: 0.75, p2y: 0.65 }; // center → start
+        this.cinematicZoomIn = 1000;   // zoomed in (near)
+        this.cinematicZoomOut = 1800;  // zoomed out (far)
+        
         this.shuffleCount = 0;
         this.lastShuffleTime = 0;
         
@@ -170,67 +177,97 @@ class CameraSystem {
         this.zoomTo(1200); // Slightly zoomed out for title
     }
     
+    /**
+     * Cubic Bezier easing helper (CSS-like, endpoints (0,0)→(1,1)).
+     * Uses the Y component only as an easing curve.
+     * @param {number} p1x
+     * @param {number} p1y
+     * @param {number} p2x
+     * @param {number} p2y
+     * @param {number} t  - progress [0,1]
+     * @returns {number} eased progress in [0,1]
+     */
+    bezierEaseY(p1x, p1y, p2x, p2y, t) {
+        const u = 1 - t;
+        // Bezier Y for (0,0), (p1x,p1y), (p2x,p2y), (1,1)
+        return (
+            3 * u * u * t * p1y +
+            3 * u * t * t * p2y +
+            t * t * t
+        );
+    }
+
+    /** Set the easing curves for the two cinematic segments. */
+    setCinematicEasing(easeA, easeB) {
+        // Each ease is an object {p1x, p1y, p2x, p2y}
+        if (easeA) this.cinematicEaseA = { ...this.cinematicEaseA, ...easeA };
+        if (easeB) this.cinematicEaseB = { ...this.cinematicEaseB, ...easeB };
+    }
+
+    /** Set zoom levels for near (in) and far (out). */
+    setCinematicZooms(zoomIn, zoomOut) {
+        if (typeof zoomIn === 'number') this.cinematicZoomIn = zoomIn;
+        if (typeof zoomOut === 'number') this.cinematicZoomOut = zoomOut;
+    }
+
     updateCinematic(dt, currentTime) {
         if (!this.cinematicActive) return false;
-        
+
         this.cinematicTime += dt;
-        
+
         // Fade in canvas as cinematic starts
         const fadeProgress = Math.min(this.cinematicTime / 1.0, 1.0);
         if (typeof document !== 'undefined') {
             const canvas = document.getElementById('canvas');
-            if (canvas) {
-                canvas.style.opacity = fadeProgress;
-            }
+            if (canvas) canvas.style.opacity = fadeProgress;
         }
-        
-        // Cinematic camera movement
-        const progress = Math.min(this.cinematicTime / this.cinematicTotalDuration, 1.0);
-        
-        // Get current maze dimensions from game
+
+        // Overall progress [0,1]
+        const raw = Math.min(this.cinematicTime / this.cinematicTotalDuration, 1.0);
+
+        // --- Keyframes ---
         const mazeSize = this.currentMazeSize || 25;
-        const goalX = (mazeSize - 2) * 25 + 12.5;
-        const goalY = (mazeSize - 2) * 25 + 12.5;
-        const startX = 25 + 7.5;
-        const startY = 25 + 7.5;
-        const mazeCenter = { x: (mazeSize / 2) * 25, y: (mazeSize / 2) * 25 };
-        
-        // Camera path: exit -> center -> entrance
-        let camX, camY;
-        if (progress <= 0.5) {
-            const t = progress * 2;
-            camX = goalX + (mazeCenter.x - goalX) * t;
-            camY = goalY + (mazeCenter.y - goalY) * t;
+        const goal = { x: (mazeSize - 2) * 25 + 12.5, y: (mazeSize - 2) * 25 + 12.5 };
+        const center = { x: (mazeSize / 2) * 25, y: (mazeSize / 2) * 25 };
+        const start = { x: 25 + 7.5, y: 25 + 7.5 };
+
+        // Segment A: goal → center (zoom to far)
+        // Segment B: center → start (zoom back to near)
+        let segT, ease, from, to, zoomFrom, zoomTo;
+        if (raw <= 0.5) {
+            segT = raw * 2; // [0,1]
+            ease = this.cinematicEaseA;
+            from = goal; to = center;
+            zoomFrom = this.cinematicZoomIn;  // start near
+            zoomTo   = this.cinematicZoomOut; // go far
         } else {
-            const t = (progress - 0.5) * 2;
-            camX = mazeCenter.x + (startX - mazeCenter.x) * t;
-            camY = mazeCenter.y + (startY - mazeCenter.y) * t;
+            segT = (raw - 0.5) * 2; // [0,1]
+            ease = this.cinematicEaseB;
+            from = center; to = start;
+            zoomFrom = this.cinematicZoomOut; // start far
+            zoomTo   = this.cinematicZoomIn;  // go near
         }
-        
-        // Zoom curve
-        let zoom;
-        if (progress <= 0.5) {
-            const t = progress * 2;
-            zoom = 1000 + (2200 - 1000) * Math.pow(t, 2);
-        } else {
-            const t = (progress - 0.5) * 2;
-            zoom = 2200 + (1000 - 2200) * Math.pow(t, 2);
-        }
-        
+
+        // Eased progress for the current segment
+        const eased = this.bezierEaseY(ease.p1x, ease.p1y, ease.p2x, ease.p2y, Math.max(0, Math.min(1, segT)));
+
+        // LERP position and zoom on the segment
+        const camX = from.x + (to.x - from.x) * eased;
+        const camY = from.y + (to.y - from.y) * eased;
+        const zoom = zoomFrom + (zoomTo - zoomFrom) * eased;
+
         this.moveTo(camX, camY);
         this.zoomTo(zoom);
-        
-        // Check if cinematic is complete
-        if (progress >= 1.0) {
+
+        if (raw >= 1.0) {
             this.cinematicActive = false;
-            // Sync spring camera system to final cinematic position to prevent jerking
             this.camX = camX;
             this.camY = camY;
             this.camVX = 0;
             this.camVY = 0;
             return true;
         }
-        
+
         return false;
     }
     

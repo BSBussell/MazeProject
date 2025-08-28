@@ -3,7 +3,7 @@
  * Horror increases with each map reshuffle and level completion
  */
 class HorrorSystem {
-    constructor({ targetTime = 120, cooldown = 45, rng = Math.random } = {}) {
+    constructor({ targetTime = 240, cooldown = 45, rng = Math.random } = {}) {
         this.targetTime = targetTime;
         this.cooldown = cooldown;
         this.rng = rng;
@@ -11,14 +11,14 @@ class HorrorSystem {
         this.elapsed = 0;
         this.running = false;
         this.nextAllowedAt = 0; // seconds since run start
-        
+
         // Horror accumulation tied to map events
         this.horrorLevel = 0; // 0-1, increases with map events
         this.lastReliefEvent = 0; // Track events since last relief
         this.totalMapEvents = 0; // Count of all map events (reshuffles + completions)
 
         // An array of horror effect instances
-        this.effects = []
+        this.effects = [];
     }
 
     addEffect(effect) {
@@ -29,36 +29,40 @@ class HorrorSystem {
         }
     }
 
-    startRun() { 
-        this.elapsed = 0; 
-        this.running = true; 
+    startRun() {
+        this.elapsed = 0;
+        this.running = true;
         this.nextAllowedAt = 0;
 
-        // Call start for each horror effect (pass system as first arg)
-        this.effects.forEach(effect => {
+        // Call start for each horror effect (no system param, effect uses this.system)
+        this.effects.forEach((effect) => {
             try {
-                if (typeof effect.onGameStart === 'function') effect.onGameStart(this);
+                if (typeof effect.onGameStart === "function")
+                    effect.onGameStart();
             } catch (e) {
-                console.warn('[HorrorSystem] effect onGameStart failed', e);
+                console.warn("[HorrorSystem] effect onGameStart failed", e);
             }
         });
 
-        console.log(`[HorrorSystem] Run started - Horror level: ${this.horrorLevel.toFixed(2)}`);
+        console.log(
+            `[HorrorSystem] Run started - Horror level: ${this.horrorLevel.toFixed(2)}`,
+        );
     }
-    
-    endRun() { 
+
+    endRun() {
         this.running = false;
 
-        // Call end for each horror effect (pass system)
-        this.effects.forEach(effect => {
+        // Call end for each horror effect (no system param, effect uses this.system)
+        this.effects.forEach((effect) => {
             try {
-                if (typeof effect.onGameOver === 'function') effect.onGameOver(this);
+                if (typeof effect.onGameOver === "function")
+                    effect.onGameOver();
             } catch (e) {
-                console.warn('[HorrorSystem] effect end handler failed', e);
+                console.warn("[HorrorSystem] effect end handler failed", e);
             }
         });
 
-        console.log('[HorrorSystem] Run ended');
+        console.log("[HorrorSystem] Run ended");
     }
 
     // Call when map reshuffles (+0.04 horror, halved from 0.08)
@@ -67,16 +71,19 @@ class HorrorSystem {
         this.totalMapEvents++;
         this.checkForRelief();
 
-        // Notify each horror effect (pass system)
-        this.effects.forEach(effect => {
+        // Notify each horror effect (no system param, effect uses this.system)
+        this.effects.forEach((effect) => {
             try {
-                if (typeof effect.onMazeReshuffle === 'function') effect.onMazeReshuffle(this);
+                if (typeof effect.onMazeReshuffle === "function")
+                    effect.onMazeReshuffle();
             } catch (e) {
-                console.warn('[HorrorSystem] effect onMazeReshuffle failed', e);
+                console.warn("[HorrorSystem] effect onMazeReshuffle failed", e);
             }
         });
 
-        console.log(`[HorrorSystem] Map reshuffle - Horror level: ${this.horrorLevel.toFixed(2)}`);
+        console.log(
+            `[HorrorSystem] Map reshuffle - Horror level: ${this.horrorLevel.toFixed(2)}`,
+        );
     }
 
     // Call when level completed (+0.08 horror, halved from 0.16)
@@ -85,28 +92,35 @@ class HorrorSystem {
         this.totalMapEvents++;
         this.checkForRelief();
 
-        // Notify effects about new level
-        this.effects.forEach(effect => {
+        // Notify effects about new level (no system param, effect uses this.system)
+        this.effects.forEach((effect) => {
             try {
-                if (typeof effect.onNewLevel === 'function') effect.onNewLevel(this, level);
+                if (typeof effect.onNewLevel === "function")
+                    effect.onNewLevel(level);
             } catch (e) {
-                console.warn('[HorrorSystem] effect onNewLevel failed', e);
+                console.warn("[HorrorSystem] effect onNewLevel failed", e);
             }
         });
 
-        console.log(`[HorrorSystem] Level ${level} complete - Horror level: ${this.horrorLevel.toFixed(2)}`);
+        console.log(
+            `[HorrorSystem] Level ${level} complete - Horror level: ${this.horrorLevel.toFixed(2)}`,
+        );
     }
 
     onPelletCollected(player) {
         // Grant 0.025 horror relief
         this.horrorLevel = Math.max(0, this.horrorLevel - 0.025);
 
-        // Notify effects (pass system and player)
-        this.effects.forEach(effect => {
+        // Notify effects (no system param, effect uses this.system)
+        this.effects.forEach((effect) => {
             try {
-                if (typeof effect.onPelletCollected === 'function') effect.onPelletCollected(this, player);
+                if (typeof effect.onPelletCollected === "function")
+                    effect.onPelletCollected(player);
             } catch (e) {
-                console.warn('[HorrorSystem] effect onPelletCollected failed', e);
+                console.warn(
+                    "[HorrorSystem] effect onPelletCollected failed",
+                    e,
+                );
             }
         });
     }
@@ -116,10 +130,16 @@ class HorrorSystem {
         const eventsSinceRelief = this.totalMapEvents - this.lastReliefEvent;
 
         // 10% chance of relief after 8+ events, but only if horror is high enough
-        if (eventsSinceRelief >= 8 && this.horrorLevel >= 0.4 && this.rng() < 0.1) {
+        if (
+            eventsSinceRelief >= 8 &&
+            this.horrorLevel >= 0.4 &&
+            this.rng() < 0.1
+        ) {
             this.horrorLevel = Math.max(0, this.horrorLevel - 0.2);
             this.lastReliefEvent = this.totalMapEvents;
-            console.log(`[HorrorSystem] RELIEF! Horror reduced after ${eventsSinceRelief} events`);
+            console.log(
+                `[HorrorSystem] RELIEF! Horror reduced after ${eventsSinceRelief} events`,
+            );
         }
     }
 
@@ -128,9 +148,9 @@ class HorrorSystem {
         this.horrorLevel = 0;
         this.totalMapEvents = 0;
         this.lastReliefEvent = 0;
-        console.log('[HorrorSystem] Horror state reset for new game');
+        console.log("[HorrorSystem] Horror state reset for new game");
     }
-    
+
     // Set audio system reference for horror audio updates
     setAudioSystem(audioSystem) {
         this.audioSystem = audioSystem;
@@ -141,18 +161,14 @@ class HorrorSystem {
         this.elapsed += dt;
 
         const intensity = this.getIntensity();
-        const now = this.elapsed;
-        
-        // Call each horrorEffect and pass the system first so effects can use it directly
-        this.effects.forEach(effect => {
+        // Call each horrorEffect, effect uses this.system internally
+        this.effects.forEach((effect) => {
             try {
-                if (typeof effect.update === 'function') {
-                    // new signature: update(system, intensity, dt, context)
-                    const context = { timeElapsed: this.elapsed, now };
-                    effect.update(this, intensity, dt, context);
+                if (typeof effect.update === "function") {
+                    effect.update(intensity, dt);
                 }
             } catch (e) {
-                console.warn('[HorrorSystem] effect update failed', e);
+                console.warn("[HorrorSystem] effect update failed", e);
             }
         });
     }
@@ -160,7 +176,7 @@ class HorrorSystem {
     getIntensity() {
         const t = Math.min(1, Math.max(0, this.elapsed / this.targetTime));
         const timeBasedIntensity = t * t * t; // cubic ease-in
-        
+
         // Combine time-based intensity with horror level from map events
         // This ensures intensity is always at least horrorLevel
         return Math.max(this.horrorLevel, timeBasedIntensity);
@@ -168,7 +184,7 @@ class HorrorSystem {
 
     // Get total horror influence (for UI display, etc.)
     getTotalHorrorInfluence() {
-        return Math.min(1, this.getIntensity() + (this.horrorLevel * 0.5));
+        return Math.min(1, this.getIntensity() + this.horrorLevel * 0.5);
     }
 
     // Debug helpers
@@ -183,7 +199,7 @@ class HorrorSystem {
             nextAllowedAt: this.nextAllowedAt.toFixed(1),
             silentRoundReady: window.GameFlags?.forceSilentRound || false,
             totalMapEvents: this.totalMapEvents,
-            eventsSinceRelief: this.totalMapEvents - this.lastReliefEvent
+            eventsSinceRelief: this.totalMapEvents - this.lastReliefEvent,
         };
     }
 }
