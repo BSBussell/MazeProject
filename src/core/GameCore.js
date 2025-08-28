@@ -86,9 +86,7 @@ class GameCore {
         );
         this.systems.horror.addEffect(new HorrorAudio(this.systems.horror));
         this.systems.horror.addEffect(new HorrorCRT(this.systems.horror));
-        this.systems.horror.addEffect(
-            new HorrorCorruptMaze(this.systems.horror),
-        );
+        this.systems.horror.addEffect(new HorrorCorruptMaze(this.systems.horror));
         this.systems.horror.addEffect(new HorrorGhost(this.systems.horror));
 
         // Connect horror system to audio system for scary audio
@@ -262,20 +260,12 @@ class GameCore {
         this.entities.player.update(playerState);
 
         // Update camera to follow player
-        this.systems.camera.followPlayer(
-            this.entities.player,
-            dt,
-            this.shuffleTimeRemaining,
-        );
+        this.systems.camera.followPlayer(this.entities.player, dt, this.shuffleTimeRemaining);
 
         // Update any active ghosts and check for collisions
         for (let i = this.activeGhosts.length - 1; i >= 0; i--) {
             const ghost = this.activeGhosts[i];
-            const collided = ghost.update(
-                dt,
-                this.entities.player,
-                this.systems.camera,
-            );
+            const collided = ghost.update(dt, this.entities.player, this.systems.camera);
             if (collided) {
                 this.handleGhostCollision(ghost);
                 // Stop the loop for this frame since a shuffle was triggered
@@ -328,7 +318,7 @@ class GameCore {
         this.entities.player.render(this.ctx);
 
         // Render any active ghosts
-        this.activeGhosts.forEach((ghost) => ghost.render(this.ctx));
+        this.activeGhosts.forEach(ghost => ghost.render(this.ctx));
 
         // Render effects
         this.systems.effects.render(this.ctx, currentTime);
@@ -479,7 +469,7 @@ class GameCore {
     checkShuffleTimer() {
         if (this.shuffleTimeRemaining <= 0 && !this.transitioningToNext) {
             // Check if the next shuffle would end the game
-            if (this.Wait - this.SHUFFLE_TIME_DECREASE < 0) {
+            if ((this.Wait - this.SHUFFLE_TIME_DECREASE) < 0) {
                 this.gameOver();
             } else {
                 this.shuffleMaze();
@@ -497,46 +487,33 @@ class GameCore {
             this.entities.player.path = [];
         }
 
-        // Preserve player position
-        const currentState = this.systems.physics.getPose();
-        const currentTileX = Math.floor(currentState.x / 25);
-        const currentTileY = Math.floor(currentState.y / 25);
+        // Preserve player's current tile position
+        const playerPhysics = this.systems.physics.getPose();
+        const playerTileX = Math.floor(playerPhysics.x / 25);
+        const playerTileY = Math.floor(playerPhysics.y / 25);
 
-        let maze = this.generateNewMaze();
+        // Generate the new maze
+        const maze = this.generateNewMaze();
+
+        // Trigger the hook, allowing horror effects to corrupt the maze
         this.triggerHook("onMazeReshuffle", maze);
 
-        // Ensure player isn't in a wall after maze regen
-        let attempts = 0;
-        while (
-            this.systems.maze.isSolid(currentTileY, currentTileX) &&
-            attempts < 10
-        ) {
-            maze = this.generateNewMaze();
-            // We don't trigger the hook again here, as this is part of the same shuffle event.
-            // The final maze state is what matters. If corruption happens, it should happen
-            // on the *first* generated maze of the shuffle sequence.
-            attempts++;
-        }
+        // AFTER corruption, ensure there's still a path from the player's spot to the goal
+        this.systems.maze.ensurePathFrom(playerTileX, playerTileY);
 
-        // If still in wall, move to nearest safe position
-        if (attempts >= 10) {
-            this.entities.player.moveToSafePosition(this.systems.maze);
-        }
-
-        this.systems.physics.setPose(currentState.x, currentState.y);
+        // The player's position is now guaranteed to be a valid path,
+        // so we just need to reset the physics system to that position.
+        this.systems.physics.setPose(playerPhysics.x, playerPhysics.y);
     }
 
     handleGhostCollision(ghost) {
         console.log("[GameCore] Player collided with ghost!");
 
         // Increase horror
-        this.systems.horror.horrorLevel = Math.min(
-            1.0,
-            this.systems.horror.horrorLevel + 0.1,
-        );
+        this.systems.horror.horrorLevel = Math.min(1.0, this.systems.horror.horrorLevel + 0.1);
 
         // Play a sound
-        // this.systems.audio.sfxBuzz();
+        this.systems.audio.sfxBuzz();
 
         // Clean up the ghost's resources (e.g., audio)
         ghost.destroy();

@@ -115,11 +115,11 @@ class HorrorSystem {
 
         // Punish Greed
         if (pellet.type === "point") {
-            this.horrorLevel = Math.max(0, this.horrorLevel + 0.015);
+            this.horrorLevel = Math.max(0, this.horrorLevel + 0.125);
 
             // Reward self preservation
         } else {
-            this.horrorLevel = Math.max(0, this.horrorLevel - 0.0125);
+            this.horrorLevel = Math.max(0, this.horrorLevel - 0.025);
         }
 
         // This is how scream says horror movies should work

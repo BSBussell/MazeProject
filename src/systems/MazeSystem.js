@@ -160,9 +160,24 @@ class MazeSystem {
             if (goalY > 2) this.maze[goalY-1][goalX] = 0;
         }
         
-        // Use flood fill to check connectivity
+        // Use flood fill to check connectivity from the default start
         if (!this.isReachable(1, 1, goalX, goalY)) {
-            this.createPathToGoal(goalX, goalY);
+            this.createPath(1, 1, goalX, goalY);
+        }
+    }
+
+    ensurePathFrom(startX, startY) {
+        const goalX = this.width - 2;
+        const goalY = this.height - 2;
+
+        // Ensure the player's tile is not a wall, just in case.
+        if (this.maze[startY] && this.maze[startY][startX]) {
+            this.maze[startY][startX] = 0;
+        }
+
+        if (!this.isReachable(startX, startY, goalX, goalY)) {
+            this.createPath(startX, startY, goalX, goalY);
+            console.log(`[MazeSystem] Carved new path from (${startX},${startY}) to goal.`);
         }
     }
     
@@ -194,9 +209,9 @@ class MazeSystem {
         return false;
     }
     
-    createPathToGoal(goalX, goalY) {
-        // Create a simple path from start to goal
-        let currentX = 1, currentY = 1;
+    createPath(startX, startY, goalX, goalY) {
+        // Create a simple path from a given start to the goal
+        let currentX = startX, currentY = startY;
         
         // Move horizontally first
         while (currentX < goalX) {
