@@ -70,7 +70,10 @@ class HorrorAudio extends HorrorEffect {
         // Process sounds that are fading out
         for (let i = this.fadingOutSounds.length - 1; i >= 0; i--) {
             const fading = this.fadingOutSounds[i];
-            fading.sound.volume -= fading.fadeSpeed * dt;
+            const newVolume = fading.sound.volume - (fading.fadeSpeed * dt);
+
+            // Clamp the volume to ensure it never goes below 0, which causes a DOMException.
+            fading.sound.volume = Math.max(0, newVolume);
 
             if (fading.sound.volume <= 0) {
                 fading.sound.pause();

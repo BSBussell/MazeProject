@@ -9,14 +9,6 @@ class Ghost {
         this.x = startPos.x;
         this.y = startPos.y;
 
-        if (this.isClone) {
-            this.spawnTime = performance.now();
-            this.spawnFlickerDuration = 1000; // 1 second
-            this.flickerOn = true;
-            this.flickerRate = 0.08; // Flicker every 0.08 seconds
-            this.flickerTimer = this.flickerRate;
-        }
-
         this.width = 15;
         this.height = 15;
         this.active = true;
@@ -70,20 +62,6 @@ class Ghost {
         // Manage ambient sound based on visibility
         if (camera) {
             this.manageAmbientSound(camera);
-        }
-
-        // Update the flicker state timer if applicable
-        if (this.isClone && this.spawnTime) {
-            const timeSinceSpawn = performance.now() - this.spawnTime;
-            if (timeSinceSpawn < this.spawnFlickerDuration) {
-                this.flickerTimer -= dt;
-                if (this.flickerTimer <= 0) {
-                    this.flickerOn = !this.flickerOn;
-                    this.flickerTimer = this.flickerRate;
-                }
-            } else {
-                this.flickerOn = true; // Ensure it's solid after the flicker period
-            }
         }
 
         // Tween volume towards target
@@ -149,11 +127,6 @@ class Ghost {
             return;
         }
 
-        // Handle spawn flicker for clones
-        if (this.isClone && !this.flickerOn) {
-            // If the flicker state is off, don't render.
-            return;
-        }
 
         // Render clones in a different color for debugging/verification
         if (this.isClone) {
