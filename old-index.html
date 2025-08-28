@@ -1,0 +1,2631 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, user-scalable=no">
+  <style>
+    body,
+    html {
+      margin: 0;
+      padding: 0;
+      font-family: 'Nova Square', monospace;
+      background: black;
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      /* Safe area support for iPhone notches */
+      padding-top: env(safe-area-inset-top);
+      padding-bottom: env(safe-area-inset-bottom);
+      padding-left: env(safe-area-inset-left);
+      padding-right: env(safe-area-inset-right);
+    }
+    
+    canvas {
+      display: block;
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100vw;
+      height: 100vh;
+      z-index: 1;
+    }
+  </style>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Nova+Square&display=swap" rel="stylesheet">
+  <script>
+    (function(i, s, o, g, r, a, m) {
+      i['GoogleAnalyticsObject'] = r;
+      i[r] = i[r] || function() {
+        (i[r].q = i[r].q || []).push(arguments)
+      }, i[r].l = 1 * new Date();
+      a = s.createElement(o),
+        m = s.getElementsByTagName(o)[0];
+      a.async = 1;
+      a.src = g;
+      m.parentNode.insertBefore(a, m)
+    })(window, document, 'script', 'https://www.google-analytics.com/analytics.js', 'ga');
+
+    ga('create', 'UA-105384030-1', 'auto');
+    ga('send', 'pageview');
+  </script>
+  <title>Maze</title>
+</head>
+
+<body>
+
+  <canvas id="canvas" width="1000" height="600" align="left" style="opacity: 0; transition: opacity 0.5s ease-in; position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; object-fit: contain;">
+            Your browser does not support the HTML5 Canvas tag, please stop using Internet Explorer.
+  </canvas>
+
+  <!--
+    The Camera Library, Not programmed by me, but it's something thats going
+    to be beyond my level for a really long time. And it would be pointless
+    to reinvent the wheel for a english project
+  -->
+  
+  <!-- CRT Filter Integration -->
+  <script type="module">
+    import { CRTFilterWebGL } from './CRTFilter.js';
+
+    // Initialize CRT filter after canvas is ready
+    let crtFilter = null;
+    let crtEnabled = false;
+
+    // CRT toggle function - accessible globally
+    window.toggleCRT = function() {
+      if (!crtFilter) {
+        const canvas = document.getElementById('canvas');
+        crtFilter = new CRTFilterWebGL(canvas, {
+          barrelDistortion: 0.05,        // Subtle screen curvature
+          curvature: 0.003,               // Additional curvature
+          chromaticAberration: 0.002,     // RGB color separation
+          staticNoise: 0.012,             // Retro static noise
+          horizontalTearing: 0.002,      // Slight horizontal distortion
+          glowBloom: 0.000,               // Pixel glow effect
+          verticalJitter: 0.002,          // Screen instability
+          retraceLines: true,             // Classic scanlines
+          scanlineIntensity: 0.2,         // Scanline visibility
+          dotMask: false,                 // Keep off for cleaner look
+          brightness: 0.87,               // Slightly dimmer for CRT feel
+          contrast: 1.15,                 // Enhanced contrast
+          desaturation: 0.08,             // Slight color fade
+          flicker: 0.015,                 // Occasional flicker
+          signalLoss: 0.125               // VHS-style interference
+        });
+      }
+      
+      if (crtEnabled) {
+        crtFilter.stop();
+        crtEnabled = false;
+        window.crtEnabled = false;
+        console.log('CRT filter disabled');
+      } else {
+        crtFilter.start();
+        crtEnabled = true;
+        window.crtEnabled = true;
+        console.log('CRT filter enabled');
+      }
+    };
+
+    // Function to temporarily intensify CRT effects for dramatic moments
+    window.crtBurst = function(duration = 1000) {
+      if (!crtFilter || !crtEnabled) return;
+      
+      // Store original values
+      const original = {
+        staticNoise: crtFilter.config.staticNoise,
+        flicker: crtFilter.config.flicker,
+        signalLoss: crtFilter.config.signalLoss,
+        verticalJitter: crtFilter.config.verticalJitter
+      };
+      
+      // Intensify effects
+      crtFilter.config.staticNoise = 0.03;
+      crtFilter.config.flicker = 0.08;
+      crtFilter.config.signalLoss = 0.1;
+      crtFilter.config.verticalJitter = 0.008;
+      
+      // Restore original values after duration
+      setTimeout(() => {
+        if (crtFilter && crtEnabled) {
+          Object.assign(crtFilter.config, original);
+        }
+      }, duration);
+    };
+
+    // Auto-enable CRT filter after a short delay
+    window.addEventListener('load', () => {
+      setTimeout(() => {
+        if (typeof window.toggleCRT === 'function') {
+          window.toggleCRT(); // Enable by default for that retro feel
+        }
+        
+        // Start background music on game load
+        if (typeof tickTockAudio !== 'undefined' && !backgroundMusicStarted) {
+          tickTockAudio.currentTime = 0;
+          tickTockAudio.play().catch(e => console.log('Audio play failed:', e));
+          backgroundMusicStarted = true;
+        }
+      }, 1500); // Give more time for everything to load
+    });
+  </script>
+  
+  <script>
+    (function() {
+
+      var Camera = function(context, settings) {
+        settings = settings || {};
+        this.distance = 1000.0;
+        this.lookat = [0, 0];
+        this.context = context;
+        this.fieldOfView = settings.fieldOfView || Math.PI / 4.0;
+        this.viewport = {
+          left: 0,
+          right: 0,
+          top: 0,
+          bottom: 0,
+          width: 0,
+          height: 0,
+          scale: [1.0, 1.0]
+        };
+        this.updateViewport();
+      };
+
+      Camera.prototype = {
+        begin: function() {
+          this.context.save();
+          this.applyScale();
+          this.applyTranslation();
+        },
+        end: function() {
+          this.context.restore();
+        },
+        applyScale: function() {
+          this.context.scale(this.viewport.scale[0], this.viewport.scale[1]);
+        },
+        applyTranslation: function() {
+          this.context.translate(-this.viewport.left, -this.viewport.top);
+        },
+        updateViewport: function() {
+          this.aspectRatio = this.context.canvas.width / this.context.canvas.height;
+          this.viewport.width = this.distance * Math.tan(this.fieldOfView);
+          this.viewport.height = this.viewport.width / this.aspectRatio;
+          this.viewport.left = this.lookat[0] - (this.viewport.width / 2.0);
+          this.viewport.top = this.lookat[1] - (this.viewport.height / 2.0);
+          this.viewport.right = this.viewport.left + this.viewport.width;
+          this.viewport.bottom = this.viewport.top + this.viewport.height;
+          this.viewport.scale[0] = this.context.canvas.width / this.viewport.width;
+          this.viewport.scale[1] = this.context.canvas.height / this.viewport.height;
+        },
+        zoomTo: function(z) {
+          this.distance = z;
+          this.updateViewport();
+        },
+        moveTo: function(x, y) {
+          this.lookat[0] = x;
+          this.lookat[1] = y;
+          this.updateViewport();
+        },
+        screenToWorld: function(x, y, obj) {
+          obj = obj || {};
+          obj.x = (x / this.viewport.scale[0]) + this.viewport.left;
+          obj.y = (y / this.viewport.scale[1]) + this.viewport.top;
+          return obj;
+        },
+        worldToScreen: function(x, y, obj) {
+          obj = obj || {};
+          obj.x = (x - this.viewport.left) * (this.viewport.scale[0]);
+          obj.y = (y - this.viewport.top) * (this.viewport.scale[1]);
+          return obj;
+        }
+      };
+
+      this.Camera = Camera;
+
+    }).call(this);
+
+    function clearCircle(context, x, y, radius) {
+      context.save();
+      context.beginPath();
+      context.arc(x, y, radius, 0, 2 * Math.PI, true);
+      context.clip();
+      context.clearRect(x - radius, y - radius, radius * 2, radius * 2);
+      context.restore();
+    }
+  </script>
+  <!--
+    A Joystick Plugin, because I was running out of time and its also very
+    simple, but I don't want to understand Javascript enough to do it
+  -->
+  <script>
+    var VirtualJoystick = function(opts) {
+      opts = opts || {};
+      this._container = opts.container || document.body;
+      this._strokeStyle = opts.strokeStyle || 'cyan';
+      this._stickEl = opts.stickElement || this._buildJoystickStick();
+      this._baseEl = opts.baseElement || this._buildJoystickBase();
+      this._mouseSupport = opts.mouseSupport !== undefined ? opts.mouseSupport : false;
+      this._stationaryBase = opts.stationaryBase || false;
+      this._baseX = this._stickX = opts.baseX || 0
+      this._baseY = this._stickY = opts.baseY || 0
+      this._limitStickTravel = opts.limitStickTravel || false
+      this._stickRadius = opts.stickRadius !== undefined ? opts.stickRadius : 100
+      this._useCssTransform = opts.useCssTransform !== undefined ? opts.useCssTransform : false
+
+      this._container.style.position = "relative"
+
+      this._container.appendChild(this._baseEl)
+      this._baseEl.style.position = "absolute"
+      this._baseEl.style.display = "none"
+      this._container.appendChild(this._stickEl)
+      this._stickEl.style.position = "absolute"
+      this._stickEl.style.display = "none"
+
+      this._pressed = false;
+      this._touchIdx = null;
+
+      if (this._stationaryBase === true) {
+        this._baseEl.style.display = "";
+        this._baseEl.style.left = (this._baseX - this._baseEl.width / 2) + "px";
+        this._baseEl.style.top = (this._baseY - this._baseEl.height / 2) + "px";
+      }
+
+      this._transform = this._useCssTransform ? this._getTransformProperty() : false;
+      this._has3d = this._check3D();
+
+      var __bind = function(fn, me) {
+        return function() {
+          return fn.apply(me, arguments);
+        };
+      };
+      this._$onTouchStart = __bind(this._onTouchStart, this);
+      this._$onTouchEnd = __bind(this._onTouchEnd, this);
+      this._$onTouchMove = __bind(this._onTouchMove, this);
+      this._container.addEventListener('touchstart', this._$onTouchStart, false);
+      this._container.addEventListener('touchend', this._$onTouchEnd, false);
+      this._container.addEventListener('touchmove', this._$onTouchMove, false);
+      if (this._mouseSupport) {
+        this._$onMouseDown = __bind(this._onMouseDown, this);
+        this._$onMouseUp = __bind(this._onMouseUp, this);
+        this._$onMouseMove = __bind(this._onMouseMove, this);
+        this._container.addEventListener('mousedown', this._$onMouseDown, false);
+        this._container.addEventListener('mouseup', this._$onMouseUp, false);
+        this._container.addEventListener('mousemove', this._$onMouseMove, false);
+      }
+    }
+
+    VirtualJoystick.prototype.destroy = function() {
+      this._container.removeChild(this._baseEl);
+      this._container.removeChild(this._stickEl);
+
+      this._container.removeEventListener('touchstart', this._$onTouchStart, false);
+      this._container.removeEventListener('touchend', this._$onTouchEnd, false);
+      this._container.removeEventListener('touchmove', this._$onTouchMove, false);
+      if (this._mouseSupport) {
+        this._container.removeEventListener('mouseup', this._$onMouseUp, false);
+        this._container.removeEventListener('mousedown', this._$onMouseDown, false);
+        this._container.removeEventListener('mousemove', this._$onMouseMove, false);
+      }
+    }
+
+    /**
+     * @returns {Boolean} true if touchscreen is currently available, false otherwise
+     */
+    VirtualJoystick.touchScreenAvailable = function() {
+      return 'createTouch' in document ? true : false;
+    }
+
+    /**
+     * microevents.js - https://github.com/jeromeetienne/microevent.js
+     */
+    ;
+    (function(destObj) {
+      destObj.addEventListener = function(event, fct) {
+        if (this._events === undefined) this._events = {};
+        this._events[event] = this._events[event] || [];
+        this._events[event].push(fct);
+        return fct;
+      };
+      destObj.removeEventListener = function(event, fct) {
+        if (this._events === undefined) this._events = {};
+        if (event in this._events === false) return;
+        this._events[event].splice(this._events[event].indexOf(fct), 1);
+      };
+      destObj.dispatchEvent = function(event /* , args... */ ) {
+        if (this._events === undefined) this._events = {};
+        if (this._events[event] === undefined) return;
+        var tmpArray = this._events[event].slice();
+        for (var i = 0; i < tmpArray.length; i++) {
+          var result = tmpArray[i].apply(this, Array.prototype.slice.call(arguments, 1))
+          if (result !== undefined) return result;
+        }
+        return undefined
+      };
+    })(VirtualJoystick.prototype);
+
+    //////////////////////////////////////////////////////////////////////////////////
+    //										//
+    //////////////////////////////////////////////////////////////////////////////////
+
+    VirtualJoystick.prototype.deltaX = function() {
+      return this._stickX - this._baseX;
+    }
+    VirtualJoystick.prototype.deltaY = function() {
+      return this._stickY - this._baseY;
+    }
+
+    VirtualJoystick.prototype.up = function() {
+      if (this._pressed === false) return false;
+      var deltaX = this.deltaX();
+      var deltaY = this.deltaY();
+      if (deltaY >= 0) return false;
+      if (Math.abs(deltaX) > 2 * Math.abs(deltaY)) return false;
+      return true;
+    }
+    VirtualJoystick.prototype.down = function() {
+      if (this._pressed === false) return false;
+      var deltaX = this.deltaX();
+      var deltaY = this.deltaY();
+      if (deltaY <= 0) return false;
+      if (Math.abs(deltaX) > 2 * Math.abs(deltaY)) return false;
+      return true;
+    }
+    VirtualJoystick.prototype.right = function() {
+      if (this._pressed === false) return false;
+      var deltaX = this.deltaX();
+      var deltaY = this.deltaY();
+      if (deltaX <= 0) return false;
+      if (Math.abs(deltaY) > 2 * Math.abs(deltaX)) return false;
+      return true;
+    }
+    VirtualJoystick.prototype.left = function() {
+      if (this._pressed === false) return false;
+      var deltaX = this.deltaX();
+      var deltaY = this.deltaY();
+      if (deltaX >= 0) return false;
+      if (Math.abs(deltaY) > 2 * Math.abs(deltaX)) return false;
+      return true;
+    }
+
+    //////////////////////////////////////////////////////////////////////////////////
+    //										//
+    //////////////////////////////////////////////////////////////////////////////////
+
+    VirtualJoystick.prototype._onUp = function() {
+      this._pressed = false;
+      this._stickEl.style.display = "none";
+
+      if (this._stationaryBase == false) {
+        this._baseEl.style.display = "none";
+
+        this._baseX = this._baseY = 0;
+        this._stickX = this._stickY = 0;
+      }
+    }
+
+    VirtualJoystick.prototype._onDown = function(x, y) {
+      this._pressed = true;
+      if (this._stationaryBase == false) {
+        this._baseX = x;
+        this._baseY = y;
+        this._baseEl.style.display = "";
+        this._move(this._baseEl.style, (this._baseX - this._baseEl.width / 2), (this._baseY - this._baseEl.height / 2));
+      }
+
+      this._stickX = x;
+      this._stickY = y;
+
+      if (this._limitStickTravel === true) {
+        var deltaX = this.deltaX();
+        var deltaY = this.deltaY();
+        var stickDistance = Math.sqrt((deltaX * deltaX) + (deltaY * deltaY));
+        if (stickDistance > this._stickRadius) {
+          var stickNormalizedX = deltaX / stickDistance;
+          var stickNormalizedY = deltaY / stickDistance;
+
+          this._stickX = stickNormalizedX * this._stickRadius + this._baseX;
+          this._stickY = stickNormalizedY * this._stickRadius + this._baseY;
+        }
+      }
+
+      this._stickEl.style.display = "";
+      this._move(this._stickEl.style, (this._stickX - this._stickEl.width / 2), (this._stickY - this._stickEl.height / 2));
+    }
+
+    VirtualJoystick.prototype._onMove = function(x, y) {
+      if (this._pressed === true) {
+        this._stickX = x;
+        this._stickY = y;
+
+        if (this._limitStickTravel === true) {
+          var deltaX = this.deltaX();
+          var deltaY = this.deltaY();
+          var stickDistance = Math.sqrt((deltaX * deltaX) + (deltaY * deltaY));
+          if (stickDistance > this._stickRadius) {
+            var stickNormalizedX = deltaX / stickDistance;
+            var stickNormalizedY = deltaY / stickDistance;
+
+            this._stickX = stickNormalizedX * this._stickRadius + this._baseX;
+            this._stickY = stickNormalizedY * this._stickRadius + this._baseY;
+          }
+        }
+
+        this._move(this._stickEl.style, (this._stickX - this._stickEl.width / 2), (this._stickY - this._stickEl.height / 2));
+      }
+    }
+
+
+    //////////////////////////////////////////////////////////////////////////////////
+    //		bind touch events (and mouse events for debug)			//
+    //////////////////////////////////////////////////////////////////////////////////
+
+    VirtualJoystick.prototype._onMouseUp = function(event) {
+      return this._onUp();
+    }
+
+    VirtualJoystick.prototype._onMouseDown = function(event) {
+      event.preventDefault();
+      var x = event.clientX;
+      var y = event.clientY;
+      return this._onDown(x, y);
+    }
+
+    VirtualJoystick.prototype._onMouseMove = function(event) {
+      var x = event.clientX;
+      var y = event.clientY;
+      return this._onMove(x, y);
+    }
+
+    //////////////////////////////////////////////////////////////////////////////////
+    //		comment								//
+    //////////////////////////////////////////////////////////////////////////////////
+
+    VirtualJoystick.prototype._onTouchStart = function(event) {
+      // if there is already a touch inprogress do nothing
+      if (this._touchIdx !== null) return;
+
+      // notify event for validation
+      var isValid = this.dispatchEvent('touchStartValidation', event);
+      if (isValid === false) return;
+
+      // dispatch touchStart
+      this.dispatchEvent('touchStart', event);
+
+      event.preventDefault();
+      // get the first who changed
+      var touch = event.changedTouches[0];
+      // set the touchIdx of this joystick
+      this._touchIdx = touch.identifier;
+
+      // forward the action
+      var x = touch.pageX;
+      var y = touch.pageY;
+      return this._onDown(x, y)
+    }
+
+    VirtualJoystick.prototype._onTouchEnd = function(event) {
+      // if there is no touch in progress, do nothing
+      if (this._touchIdx === null) return;
+
+      // dispatch touchEnd
+      this.dispatchEvent('touchEnd', event);
+
+      // try to find our touch event
+      var touchList = event.changedTouches;
+      for (var i = 0; i < touchList.length && touchList[i].identifier !== this._touchIdx; i++);
+      // if touch event isnt found,
+      if (i === touchList.length) return;
+
+      // reset touchIdx - mark it as no-touch-in-progress
+      this._touchIdx = null;
+
+      //??????
+      // no preventDefault to get click event on ios
+      event.preventDefault();
+
+      return this._onUp()
+    }
+
+    VirtualJoystick.prototype._onTouchMove = function(event) {
+      // if there is no touch in progress, do nothing
+      if (this._touchIdx === null) return;
+
+      // try to find our touch event
+      var touchList = event.changedTouches;
+      for (var i = 0; i < touchList.length && touchList[i].identifier !== this._touchIdx; i++);
+      // if touch event with the proper identifier isnt found, do nothing
+      if (i === touchList.length) return;
+      var touch = touchList[i];
+
+      event.preventDefault();
+
+      var x = touch.pageX;
+      var y = touch.pageY;
+      return this._onMove(x, y)
+    }
+
+
+    //////////////////////////////////////////////////////////////////////////////////
+    //		build default stickEl and baseEl				//
+    //////////////////////////////////////////////////////////////////////////////////
+
+    /**
+     * build the canvas for joystick base
+     */
+    VirtualJoystick.prototype._buildJoystickBase = function() {
+      var canvas = document.createElement('canvas');
+      canvas.width = 126;
+      canvas.height = 126;
+
+      var ctx = canvas.getContext('2d');
+      ctx.beginPath();
+      ctx.strokeStyle = this._strokeStyle;
+      ctx.lineWidth = 6;
+      ctx.arc(canvas.width / 2, canvas.width / 2, 40, 0, Math.PI * 2, true);
+      ctx.stroke();
+
+      ctx.beginPath();
+      ctx.strokeStyle = this._strokeStyle;
+      ctx.lineWidth = 2;
+      ctx.arc(canvas.width / 2, canvas.width / 2, 60, 0, Math.PI * 2, true);
+      ctx.stroke();
+
+      return canvas;
+    }
+
+    /**
+     * build the canvas for joystick stick
+     */
+    VirtualJoystick.prototype._buildJoystickStick = function() {
+      var canvas = document.createElement('canvas');
+      canvas.width = 86;
+      canvas.height = 86;
+      var ctx = canvas.getContext('2d');
+      ctx.beginPath();
+      ctx.strokeStyle = this._strokeStyle;
+      ctx.lineWidth = 6;
+      ctx.arc(canvas.width / 2, canvas.width / 2, 40, 0, Math.PI * 2, true);
+      ctx.stroke();
+      return canvas;
+    }
+
+    //////////////////////////////////////////////////////////////////////////////////
+    //		move using translate3d method with fallback to translate > 'top' and 'left'
+    //      modified from https://github.com/component/translate and dependents
+    //////////////////////////////////////////////////////////////////////////////////
+
+    VirtualJoystick.prototype._move = function(style, x, y) {
+      if (this._transform) {
+        if (this._has3d) {
+          style[this._transform] = 'translate3d(' + x + 'px,' + y + 'px, 0)';
+        } else {
+          style[this._transform] = 'translate(' + x + 'px,' + y + 'px)';
+        }
+      } else {
+        style.left = x + 'px';
+        style.top = y + 'px';
+      }
+    }
+
+    VirtualJoystick.prototype._getTransformProperty = function() {
+      var styles = [
+        'webkitTransform',
+        'MozTransform',
+        'msTransform',
+        'OTransform',
+        'transform'
+      ];
+
+      var el = document.createElement('p');
+      var style;
+
+      for (var i = 0; i < styles.length; i++) {
+        style = styles[i];
+        if (null != el.style[style]) {
+          return style;
+        }
+      }
+    }
+
+    VirtualJoystick.prototype._check3D = function() {
+      var prop = this._getTransformProperty();
+      // IE8<= doesn't have `getComputedStyle`
+      if (!prop || !window.getComputedStyle) return module.exports = false;
+
+      var map = {
+        webkitTransform: '-webkit-transform',
+        OTransform: '-o-transform',
+        msTransform: '-ms-transform',
+        MozTransform: '-moz-transform',
+        transform: 'transform'
+      };
+
+      // from: https://gist.github.com/lorenzopolidori/3794226
+      var el = document.createElement('div');
+      el.style[prop] = 'translate3d(1px,1px,1px)';
+      document.body.insertBefore(el, null);
+      var val = getComputedStyle(el).getPropertyValue(map[prop]);
+      document.body.removeChild(el);
+      var exports = null != val && val.length && 'none' != val;
+      return exports;
+    }
+  </script>
+  <script>
+    // PhysicsAABB module - crisp AABB physics with time-based integration
+    const PhysicsAABB = (() => {
+      // --- config (tuning knobs) ---
+      let MAX_SPEED = 300;   // px/s (increased from 200 for faster gameplay)
+      let STEER     = 7.5;   // 1/s, reduced for softer accel
+      let DRAG      = 9.0;   // 1/s, increased for crisper stops
+      let TILE = 25, PW = 13, PH = 13, EPS = 0.0001;
+
+      // --- state ---
+      let x = 25, y = 25, vx = 0, vy = 0;
+      let mazeRef = null;
+
+      function configure(opts) {
+        if (opts.MAX_SPEED !== undefined) MAX_SPEED = opts.MAX_SPEED;
+        if (opts.STEER !== undefined) STEER = opts.STEER;
+        if (opts.DRAG !== undefined) DRAG = opts.DRAG;
+        if (opts.TILE !== undefined) TILE = opts.TILE;
+        if (opts.PW !== undefined) PW = opts.PW;
+        if (opts.PH !== undefined) PH = opts.PH;
+      }
+
+      function setMaze(maze) { 
+        mazeRef = maze; 
+      }
+
+      function setPose(px, py) { 
+        x = px; 
+        y = py; 
+        vx = 0; 
+        vy = 0; 
+      }
+
+      function getPose() { 
+        return { x, y, vx, vy }; 
+      }
+
+      function getConfig() {
+        return { MAX_SPEED, STEER, DRAG, TILE, PW, PH };
+      }
+
+      function isSolid(r, c) {
+        if (!mazeRef) return false;
+        return (r < 0 || c < 0 || r >= mazeRef.length || c >= mazeRef[0].length) ? true
+             : mazeRef[r][c] > 0;
+      }
+
+      function step(dt, inputX, inputY) {
+        // 1) shape input -> desired velocity
+        const desiredVx = inputX * MAX_SPEED;
+        const desiredVy = inputY * MAX_SPEED;
+
+        // 2) steer vx,vy toward desired
+        const steer = 1 - Math.exp(-STEER * dt);
+        vx += (desiredVx - vx) * steer;
+        vy += (desiredVy - vy) * steer;
+
+        // 3) if input ~ 0, apply exponential drag
+        if (inputX === 0 && inputY === 0) {
+          const drag = Math.exp(-DRAG * dt);
+          vx *= drag; 
+          vy *= drag;
+          
+          // Stop micro-movements to prevent jitter
+          if (Math.abs(vx) < 0.1) vx = 0;
+          if (Math.abs(vy) < 0.1) vy = 0;
+        }
+
+        // 4) sweep X then Y against maze grid; slide and snap
+        
+        // X axis sweep
+        let dir = Math.sign(vx);
+        let newX = x + vx * dt;
+        if (dir !== 0) {
+          const topRow    = Math.floor(y / TILE);
+          const bottomRow = Math.floor((y + PH - 1) / TILE);
+          const startEdge = x + (dir > 0 ? PW : 0);
+          const endEdge   = newX + (dir > 0 ? PW : 0);
+          let startCol    = Math.floor(startEdge / TILE);
+          const endCol    = Math.floor(endEdge / TILE);
+
+          for (let col = startCol + dir; (dir > 0 ? col <= endCol : col >= endCol); col += dir) {
+            for (let row = topRow; row <= bottomRow; row++) {
+              if (isSolid(row, col)) {
+                const faceX = dir > 0 ? col * TILE : (col + 1) * TILE;
+                newX = dir > 0 ? faceX - PW - EPS : faceX + EPS;
+                vx = 0;
+                
+                // stop processing further columns
+                col = endCol + dir; 
+                break;
+              }
+            }
+          }
+        }
+        x = newX;
+
+        // Y axis sweep
+        dir = Math.sign(vy);
+        let newY = y + vy * dt;
+        if (dir !== 0) {
+          const leftCol   = Math.floor(x / TILE);
+          const rightCol  = Math.floor((x + PW - 1) / TILE);
+          const startEdge = y + (dir > 0 ? PH : 0);
+          const endEdge   = newY + (dir > 0 ? PH : 0);
+          let startRow    = Math.floor(startEdge / TILE);
+          const endRow    = Math.floor(endEdge / TILE);
+
+          for (let row = startRow + dir; (dir > 0 ? row <= endRow : row >= endRow); row += dir) {
+            for (let col = leftCol; col <= rightCol; col++) {
+              if (isSolid(row, col)) {
+                const faceY = dir > 0 ? row * TILE : (row + 1) * TILE;
+                newY = dir > 0 ? faceY - PH - EPS : faceY + EPS;
+                vy = 0;
+                
+                // stop processing further rows
+                row = endRow + dir; 
+                break;
+              }
+            }
+          }
+        }
+        y = newY;
+
+        // 5) return pose
+        return { x, y, vx, vy };
+      }
+
+      return { configure, setMaze, setPose, getPose, getConfig, step };
+    })();
+
+    // Performance optimization: reuse objects to reduce GC pressure
+    let inputVector = { x: 0, y: 0 };
+    
+    // Input shaping helper - now reuses object
+    function gameInputVector(keys, joystick, reusedObj) {
+      let ix = (keys[39] ? 1 : 0) - (keys[37] ? 1 : 0);
+      let iy = (keys[40] ? 1 : 0) - (keys[38] ? 1 : 0);
+
+      if (joystick) {
+        ix += clamp(joystick.deltaX() / (joystick._stickRadius || 50), -1, 1);
+        iy += clamp(joystick.deltaY() / (joystick._stickRadius || 50), -1, 1);
+      }
+
+      // Deadzone
+      const mag = Math.hypot(ix, iy);
+      if (mag < 0.15) {
+        reusedObj.x = 0;
+        reusedObj.y = 0;
+        return reusedObj;
+      }
+      if (mag > 1) {
+        reusedObj.x = ix / mag;
+        reusedObj.y = iy / mag;
+      } else {
+        reusedObj.x = ix;
+        reusedObj.y = iy;
+      }
+      return reusedObj;
+    }
+
+    function clamp(v, a, b) { 
+      return Math.max(a, Math.min(b, v)); 
+    }
+
+    // Tech-y text animation function
+    function renderAnimatedText(ctx, text, x, y, startTime, currentTime, fontSize = 60, colorType = "aesthetic") {
+      const animDuration = 2000; // 2 seconds total
+      const charDelay = 80; // 80ms between characters
+      const elapsed = currentTime - startTime;
+      
+      ctx.font = `${fontSize}px 'Nova Square', monospace`;
+      ctx.textAlign = "center";
+      
+      let visibleChars = Math.floor((elapsed - 300) / charDelay); // 300ms initial delay
+      visibleChars = Math.max(0, visibleChars);
+      
+      for (let i = 0; i < text.length; i++) {
+        if (i < visibleChars) {
+          // Character is visible
+          const charAge = elapsed - 300 - (i * charDelay);
+          const alpha = Math.min(1, charAge / 200); // fade in over 200ms
+          
+          // Enhanced glitch effect for first 150ms of each character
+          let offsetX = 0, offsetY = 0, scaleX = 1, scaleY = 1;
+          if (charAge < 150) {
+            const glitchIntensity = 1 - (charAge / 150);
+            offsetX = (Math.random() - 0.5) * 6 * glitchIntensity;
+            offsetY = (Math.random() - 0.5) * 4 * glitchIntensity;
+            scaleX = 1 + (Math.random() - 0.5) * 0.3 * glitchIntensity;
+            scaleY = 1 + (Math.random() - 0.5) * 0.2 * glitchIntensity;
+          }
+          
+          // Measure character position
+          const charX = x + offsetX - (ctx.measureText(text).width / 2) + ctx.measureText(text.substring(0, i)).width + ctx.measureText(text[i]).width / 2;
+          
+          // Color selection
+          let color;
+          if (colorType === "aesthetic") {
+            // Aesthetic gradient colors - cyan to purple
+            const hue = (currentTime / 20 + i * 30) % 360;
+            const lightness = 60 + Math.sin(currentTime / 500 + i) * 10;
+            color = `hsla(${hue}, 80%, ${lightness}%, ${alpha})`;
+          } else if (colorType === "rgb") {
+            // RGB cycling colors
+            const speed = 150;
+            const r = Math.sin(currentTime / speed) * 127 + 128;
+            const g = Math.sin(currentTime / speed + 2) * 127 + 128;
+            const b = Math.sin(currentTime / speed + 4) * 127 + 128;
+            color = `rgba(${Math.floor(r)}, ${Math.floor(g)}, ${Math.floor(b)}, ${alpha})`;
+          } else {
+            color = `rgba(255, 255, 255, ${alpha})`;
+          }
+          
+          // Save context for scaling
+          ctx.save();
+          ctx.translate(charX, y + offsetY);
+          ctx.scale(scaleX, scaleY);
+          ctx.translate(-charX, -(y + offsetY));
+          
+          ctx.fillStyle = color;
+          ctx.fillText(text[i], charX, y + offsetY);
+          
+          // Add glow effect for aesthetic text
+          if (colorType === "aesthetic") {
+            ctx.shadowColor = 'transparent';
+            ctx.shadowBlur = 0;
+            ctx.fillText(text[i], charX, y + offsetY);
+            ctx.shadowBlur = 0;
+          }
+          
+          ctx.restore();
+          
+          // Enhanced cursor effect on the current character
+          if (i === visibleChars - 1 && charAge < 600) {
+            const cursorAlpha = Math.sin(elapsed / 80) * 0.5 + 0.5;
+            ctx.fillStyle = `rgba(0, 255, 150, ${cursorAlpha})`;
+            ctx.fillRect(charX + ctx.measureText(text[i]).width / 2, y - fontSize + 10, 3, fontSize - 10);
+            
+            // Add cursor glow
+            ctx.shadowColor = 'transparent';
+            ctx.shadowBlur = 0;
+            ctx.fillRect(charX + ctx.measureText(text[i]).width / 2, y - fontSize + 10, 3, fontSize - 10);
+            ctx.shadowBlur = 0;
+          }
+        }
+      }
+    }
+  </script>
+  <script>
+    var canvas = document.getElementById("canvas");
+    var ctx = canvas.getContext("2d");
+    var camera = new Camera(ctx);
+
+    var canvas;
+    var canvasWidth;
+
+    // Calculate responsive joystick size based on viewport
+    function getResponsiveJoystickSize() {
+      const minDimension = Math.min(window.innerWidth, window.innerHeight);
+      // Very small joystick: 15-25px range, scaled to 1.5% of screen
+      return Math.max(15, Math.min(25, minDimension * 0.015));
+    }
+
+    var joystick = new VirtualJoystick({
+      mouseSupport: false,
+      limitStickTravel: true,
+      stickRadius: getResponsiveJoystickSize(),
+      strokeStyle: "#4444cc"
+    });
+
+    // Force override the joystick sizing after creation
+    function resizeJoystickElements() {
+      const size = getResponsiveJoystickSize();
+      const baseSize = size * 3; // Base should be about 3x the stick radius
+      const stickSize = size * 2; // Stick should be about 2x the radius
+      
+      if (joystick._baseEl) {
+        joystick._baseEl.style.width = baseSize + 'px';
+        joystick._baseEl.style.height = baseSize + 'px';
+        joystick._baseEl.style.transform = 'scale(2.0)'; // 2x bigger as requested
+      }
+      if (joystick._stickEl) {
+        joystick._stickEl.style.width = stickSize + 'px';
+        joystick._stickEl.style.height = stickSize + 'px';
+        joystick._stickEl.style.transform = 'scale(2.0)'; // 2x bigger as requested
+      }
+    }
+    
+    // Apply sizing after a brief delay to ensure elements are created
+    setTimeout(resizeJoystickElements, 100);
+
+    // left: 37, up: 38, right: 39, down: 40,
+    // spacebar: 32, pageup: 33, pagedown: 34, end: 35, home: 36
+    var keys = {
+      37: 1,
+      38: 1,
+      39: 1,
+      40: 1
+    };
+
+    function preventDefault(e) {
+      e = e || window.event;
+      if (e.preventDefault)
+        e.preventDefault();
+      e.returnValue = false;
+    }
+
+    function preventDefaultForScrollKeys(e) {
+      if (keys[e.keyCode]) {
+        preventDefault(e);
+        return false;
+      }
+    }
+
+    function disableScroll() {
+      if (window.addEventListener) // older FF
+        window.addEventListener('DOMMouseScroll', preventDefault, false);
+      window.onwheel = preventDefault; // modern standard
+      window.onmousewheel = document.onmousewheel = preventDefault; // older browsers, IE
+      window.ontouchmove = preventDefault; // mobile
+      document.onkeydown = preventDefaultForScrollKeys;
+    }
+
+    function enableScroll() {
+      if (window.removeEventListener)
+        window.removeEventListener('DOMMouseScroll', preventDefault, false);
+      window.onmousewheel = document.onmousewheel = null;
+      window.onwheel = null;
+      window.ontouchmove = null;
+      document.onkeydown = null;
+    }
+
+    function init() {
+      //canvas = document.getElementById('canvas');
+      if (canvas.getContext) {
+        //ctx = canvas.getContext("2d");
+
+        window.addEventListener('resize', resizeCanvas, false);
+        window.addEventListener('orientationchange', resizeCanvas, false);
+        resizeCanvas();
+      }
+      resizeCanvas();
+    }
+    // Resize the game area incase of
+    // really wide or small screens
+    function resizeCanvas() {
+      // Get actual screen dimensions
+      const screenWidth = window.innerWidth;
+      const screenHeight = window.innerHeight;
+      
+      // Maintain aspect ratio for game content, don't squish on mobile
+      const targetAspectRatio = 16 / 10; // Preferred game aspect ratio
+      const screenAspectRatio = screenWidth / screenHeight;
+      
+      let gameWidth, gameHeight;
+      
+      if (screenAspectRatio > targetAspectRatio) {
+        // Screen is wider than target - fit by height
+        gameHeight = screenHeight;
+        gameWidth = gameHeight * targetAspectRatio;
+      } else {
+        // Screen is taller than target - fit by width
+        gameWidth = screenWidth;
+        gameHeight = gameWidth / targetAspectRatio;
+      }
+      
+      // Set canvas to full screen for input handling
+      canvas.width = screenWidth;
+      canvas.height = screenHeight;
+      
+      // Store game rendering dimensions (this is what we'll scale to)
+      const baseGameWidth = 1000;
+      const baseGameHeight = 600;
+      
+      // Calculate scale factor to fit game content in game area
+      const scaleX = gameWidth / baseGameWidth;
+      const scaleY = gameHeight / baseGameHeight;
+      const scale = Math.min(scaleX, scaleY);
+      
+      // Store rendering info
+      window.gameArea = {
+        width: baseGameWidth * scale,
+        height: baseGameHeight * scale,
+        offsetX: (screenWidth - baseGameWidth * scale) / 2,
+        offsetY: (screenHeight - baseGameHeight * scale) / 2,
+        scale: scale
+      };
+      
+      // Update camera world dimensions to base game size
+      if (typeof camera !== 'undefined') {
+        camera.worldW = baseGameWidth;
+        camera.worldH = baseGameHeight;
+      }
+      
+      // Update joystick size for responsive scaling
+      if (typeof joystick !== 'undefined') {
+        resizeJoystickElements();
+      }
+    }
+
+    var coords = camera.worldToScreen(0, 0);
+    camera.moveTo(coords.x, coords.y);
+    ctx.fillStyle = "black";
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+    var startDate = new Date();
+    var Wait = baseShuffleTime; // Current shuffle countdown timer
+    console.log(Wait);
+    var begin = true;
+    var anim = 1875;
+    var CountDown = 3.9;
+    var beginCount = false;
+    var lose = false;
+    var win = false;
+    var dispText = "None"
+    var textTimer = 0;
+    var waitClick = true;
+    var animationSpeed = 5;
+
+    // Cinematic camera state
+    var cinematicPhase = 0; // 0: intro, 1: cinematic sequence
+    var cinematicTime = 0;
+    var cinematicTotalDuration = 6.0; // total time for the sequence (longer for shuffles)
+    var goalX = 73 * 25 + 12.5, goalY = 73 * 25 + 12.5;
+    var startX = 25 + 7.5, startY = 25 + 7.5;
+    var mazeCenter = { x: 37.5 * 25, y: 37.5 * 25 }; // will be updated dynamically
+    var shuffleCount = 0;
+    var lastShuffleTime = 0;
+
+    // Endless score system
+    var gameScore = 0;
+    var mazeLevel = 1;
+    var baseMazeSize = 25; // Much smaller starting maze for learning
+    var mazeSizeGrowth = 1.15; // 15% larger each level
+    var transitioningToNext = false;
+    var showingScore = false;
+    var scoreDisplayTime = 0;
+    
+    // Audio system
+    var tickTockAudio = new Audio('tick-tock.mp3');
+    tickTockAudio.loop = true;
+    tickTockAudio.volume = 0.2; // Lower volume for background music
+    var backgroundMusicStarted = false;
+    
+    // High score system
+    var showingLeaderboard = false;
+    var currentHighScores = [];
+    var newHighScoreIndex = -1;
+    var gameOverShuffleTimer = 0; // Track game over shuffling
+    
+    // Point pellet system (starting level 2)
+    var pointPellets = []; // Array of {x, y, collected} objects
+    var timePellets = []; // Array of {x, y, collected} objects for time bonuses
+    var speedPellets = []; // Array of {x, y, collected} objects for speed boosts
+
+    // Helper functions for FX
+    function lerp(a,b,t){ return a + (b-a)*t; }
+    function easeOutQuad(t){ return 1 - (1 - t) * (1 - t); }
+    function hueColor(h, s=100, l=60, a=1){ return `hsla(${h%360},${s}%,${l}%,${a})`; }
+
+    // FX: create popups & particles
+    function addPopup(text, x, y, kind="score") {
+      fxPopups.push({
+        text, kind,
+        x, y,
+        vx: (Math.random()-0.5)*20,
+        vy: -35 - Math.random()*25,
+        age: 0,
+        life: 0.8 // seconds
+      });
+      camKick = Math.min(1, camKick + 0.35);
+    }
+
+    function addParticles(x, y, color="#39ff14", count=10) {
+      for (let i=0;i<count;i++){
+        const ang = Math.random()*Math.PI*2;
+        const spd = 60 + Math.random()*120;
+        fxParticles.push({
+          x, y,
+          vx: Math.cos(ang)*spd,
+          vy: Math.sin(ang)*spd,
+          age: 0,
+          life: 0.5 + Math.random()*0.4,
+          color,
+          sz: 2 + Math.random()*2
+        });
+      }
+    }
+
+    // SFX stub functions
+    function sfxTick(){ /* play short tick */ }
+    function sfxPickup(){ /* play blip */ }
+    function sfxBurst(){ /* play whoosh */ }
+
+    // Update & render FX
+    function updateAndRenderFX(ctx, dt, nowMs) {
+      // POPUPS
+      for (const p of fxPopups) {
+        p.age += dt;
+        p.x += p.vx * dt;
+        p.y += p.vy * dt;
+      }
+      fxPopups = fxPopups.filter(p => p.age < p.life);
+
+      for (const p of fxPopups) {
+        const t = p.age / p.life;
+        const a = 1 - easeOutQuad(t);
+        const hue = (nowMs*8 + p.x + p.y) % 360; // rainbow shimmer
+        ctx.save();
+        ctx.globalAlpha = a;
+        ctx.font = (p.kind === "combo" ? "20px" : "18px") + " 'Nova Square', monospace";
+        ctx.fillStyle = hueColor(hue, 90, 60, 1);
+  ctx.shadowColor = 'transparent';
+  ctx.shadowBlur = 0;
+        ctx.textAlign = "center";
+        ctx.fillText(p.text, p.x, p.y);
+        ctx.restore();
+      }
+
+      // PARTICLES
+      for (const q of fxParticles) {
+        q.age += dt;
+        // simple drag
+        q.vx *= (1 - 5*dt);
+        q.vy *= (1 - 5*dt);
+        q.x += q.vx * dt;
+        q.y += q.vy * dt;
+      }
+      fxParticles = fxParticles.filter(q => q.age < q.life);
+
+      for (const q of fxParticles) {
+        const t = q.age / q.life;
+        const a = 1 - t;
+        ctx.save();
+        ctx.globalAlpha = a;
+        ctx.fillStyle = q.color;
+        ctx.fillRect(q.x - q.sz*0.5, q.y - q.sz*0.5, q.sz, q.sz);
+        ctx.restore();
+      }
+
+      // Guardrails - keep FX arrays manageable
+      if (fxPopups.length > 40) fxPopups.splice(0, fxPopups.length-40);
+      if (fxParticles.length > 200) fxParticles.splice(0, fxParticles.length-200);
+    }
+    var speedBoostActive = false; // Track if speed boost is currently active
+    var speedBoostEndTime = 0; // When the speed boost expires
+    var pelletsSpawned = false; // Prevent multiple spawning
+
+    // --- FX / Feedback state ---
+    let fxPopups = [];   // {x,y,vx,vy,age,life,text,kind}
+    let fxParticles = []; // {x,y,vx,vy,age,life,color,sz}
+    let camKick = 0;     // 0..1, quick camera pop on pickup
+
+    // Combo (resets each shuffle)
+    let comboCount = 0;
+    let comboMul   = 1.0;
+    let comboWindowUntil = 0; // ms timestamp deadline
+    const COMBO_WINDOW_MS = 1500; // 1.5s to chain another pellet
+    let lastComboBurstAt = 0;     // for UI flash after shuffle
+    var pelletAnimTime = 0; // For pellet animation
+    
+    // Maze shuffling system - shorter for tutorial
+    var baseShuffleTime = 15; // Starting shuffle time for good balance
+    var currentShuffleTime = baseShuffleTime;
+    var shuffleDecrement = 3; // Smaller decrements for smoother progression
+    var shuffleTimeBonus = 5; // Add 5 seconds every 4 levels
+    var currentMazeSize = baseMazeSize;
+
+    // Text animation state
+    var textAnimStartTime = 0;
+    var textAnimActive = false;
+
+    // Shuffle scale animation state
+    var shuffleScaleActive = false;
+    var shuffleScaleStartTime = 0;
+    var shuffleScaleDuration = 300; // 300ms pop animation
+    var shuffleScaleIntensity = 1.05; // Scale from 1.0 to 1.05
+
+    // Pellet collection zoom pop state
+    var pelletZoomActive = false;
+    var pelletZoomStartTime = 0;
+    var pelletZoomDuration = 200; // 200ms quick pop
+    var pelletZoomIntensity = 1.08; // Zoom in first, then out
+
+    // GenMaze is probably the part that I am most proud of
+    // But it works pretty simply
+    // IT snakes its way through an empty grid useing a
+    // randomized first-depth search algorithm
+    // I came very close to copying and pasteing other peoples code
+    function genMaze(width, height, startX, startY) {
+      // Initialize maze with walls (2) and unvisited cells (1)
+      var maze = [];
+      
+      // Top border
+      var row = new Array(height);
+      row.fill(2);
+      maze.push(row);
+      
+      // Main maze area
+      for (let i = 0; i <= width; i++) {
+        var row = []
+        row.push(2) // Left border
+        for (let j = 0; j <= height - 3; j++) {
+          row.push(1) // Unvisited cell
+        }
+        row.push(2) // Right border
+        maze.push(row);
+      }
+      
+      // Bottom border
+      var row = new Array(height);
+      row.fill(2);
+      maze.push(row);
+
+      // Stack-based maze generation with guaranteed completion
+      var stack = [];
+      var posX = startX;
+      var posY = startY;
+      
+      // Mark starting position as visited
+      maze[posY][posX] = 0;
+      stack.push({x: posX, y: posY});
+      
+      // Track total cells to visit
+      var totalCells = Math.floor((width - 1) / 2) * Math.floor((height - 3) / 2);
+      var visitedCells = 1;
+      
+      // Directions: [dx, dy]
+      var directions = [
+        [2, 0],   // Right
+        [-2, 0],  // Left  
+        [0, 2],   // Down
+        [0, -2]   // Up
+      ];
+      
+      // Main generation loop with stack-based backtracking
+      while (stack.length > 0 && visitedCells < totalCells) {
+        var current = stack[stack.length - 1];
+        var validDirections = [];
+        
+        // Check all four directions for unvisited cells
+        for (let i = 0; i < directions.length; i++) {
+          var newX = current.x + directions[i][0];
+          var newY = current.y + directions[i][1];
+          
+          // Check bounds and if cell is unvisited
+          if (newX > 0 && newX < width && newY > 0 && newY < height - 1 && maze[newY][newX] === 1) {
+            validDirections.push({
+              x: newX, 
+              y: newY, 
+              wallX: current.x + directions[i][0] / 2,
+              wallY: current.y + directions[i][1] / 2
+            });
+          }
+        }
+        
+        if (validDirections.length > 0) {
+          // Choose random valid direction
+          var chosen = validDirections[Math.floor(Math.random() * validDirections.length)];
+          
+          // Mark new cell as visited
+          maze[chosen.y][chosen.x] = 0;
+          
+          // Remove wall between current and new cell
+          maze[chosen.wallY][chosen.wallX] = 0;
+          
+          // Add new cell to stack
+          stack.push({x: chosen.x, y: chosen.y});
+          visitedCells++;
+        } else {
+          // No valid directions, backtrack
+          stack.pop();
+        }
+        
+        // Safety check to prevent infinite loops
+        if (stack.length === 0 && visitedCells < totalCells * 0.7) {
+          // If we've backtracked completely but haven't visited enough cells,
+          // find an unvisited cell and start again
+          for (let y = 1; y < height - 1; y += 2) {
+            for (let x = 1; x < width; x += 2) {
+              if (maze[y][x] === 1) {
+                maze[y][x] = 0;
+                stack.push({x: x, y: y});
+                visitedCells++;
+                break;
+              }
+            }
+            if (stack.length > 0) break;
+          }
+        }
+      }
+      
+      // Ensure we have a well-connected maze by connecting any isolated sections
+      for (let y = 1; y < height - 1; y += 2) {
+        for (let x = 1; x < width; x += 2) {
+          if (maze[y][x] === 1) {
+            maze[y][x] = 0; // Convert remaining unvisited cells to passages
+            
+            // Connect to adjacent passage if possible
+            if (x > 2 && maze[y][x-2] === 0) {
+              maze[y][x-1] = 0;
+            } else if (x < width - 2 && maze[y][x+2] === 0) {
+              maze[y][x+1] = 0;
+            } else if (y > 2 && maze[y-2][x] === 0) {
+              maze[y-1][x] = 0;
+            } else if (y < height - 3 && maze[y+2][x] === 0) {
+              maze[y+1][x] = 0;
+            }
+          }
+        }
+      }
+
+      // Specifically ensure goal corner is reachable by creating guaranteed paths
+      const goalX = width - 2;
+      const goalY = height - 2;
+      
+      // Make sure goal position is passable
+      if (goalY > 0 && goalX > 0 && maze[goalY] && maze[goalY][goalX] !== undefined) {
+        maze[goalY][goalX] = 0;
+        
+        // Create connections to ensure goal area is part of the maze
+        if (goalX > 2) maze[goalY][goalX-1] = 0; // Connect left
+        if (goalY > 2) maze[goalY-1][goalX] = 0; // Connect up
+      }
+
+      return maze;
+    }
+    
+    // Helper function to ensure goal is always accessible
+    function ensureGoalAccessible(maze, goalX, goalY) {
+      // Force the goal tile to be passable
+      if (maze[goalY] && maze[goalY][goalX] !== undefined) {
+        maze[goalY][goalX] = 0;
+      }
+      
+      // Use flood fill to check connectivity from start (1,1) to goal
+      function isReachable(startX, startY, targetX, targetY) {
+        const visited = new Set();
+        const queue = [{x: startX, y: startY}];
+        
+        while (queue.length > 0) {
+          const {x, y} = queue.shift();
+          const key = `${x},${y}`;
+          
+          if (visited.has(key)) continue;
+          visited.add(key);
+          
+          if (x === targetX && y === targetY) return true;
+          
+          // Check all 4 directions
+          const directions = [{dx: 0, dy: -1}, {dx: 0, dy: 1}, {dx: -1, dy: 0}, {dx: 1, dy: 0}];
+          for (const dir of directions) {
+            const newX = x + dir.dx;
+            const newY = y + dir.dy;
+            
+            if (maze[newY] && maze[newY][newX] !== undefined && 
+                maze[newY][newX] === 0 && !visited.has(`${newX},${newY}`)) {
+              queue.push({x: newX, y: newY});
+            }
+          }
+        }
+        return false;
+      }
+      
+      // If goal is not reachable, create a path
+      if (!isReachable(1, 1, goalX, goalY)) {
+        // Create a simple path from start to goal
+        let currentX = 1, currentY = 1;
+        
+        // Move horizontally first
+        while (currentX < goalX) {
+          currentX++;
+          if (maze[currentY] && maze[currentY][currentX] !== undefined) {
+            maze[currentY][currentX] = 0;
+          }
+        }
+        
+        // Then move vertically
+        while (currentY < goalY) {
+          currentY++;
+          if (maze[currentY] && maze[currentY][currentX] !== undefined) {
+            maze[currentY][currentX] = 0;
+          }
+        }
+        
+        // Double check by creating additional connections if needed
+        if (!isReachable(1, 1, goalX, goalY)) {
+          // Create L-shaped path as backup
+          for (let x = 1; x <= goalX; x++) {
+            if (maze[1] && maze[1][x] !== undefined) maze[1][x] = 0;
+          }
+          for (let y = 1; y <= goalY; y++) {
+            if (maze[y] && maze[y][goalX] !== undefined) maze[y][goalX] = 0;
+          }
+        }
+      }
+      
+      return maze;
+    }
+    
+    // Juicy timer with circular progress
+    function renderJuicyTimer(ctx, timeRemaining, maxTime, x, y) {
+      const radius = 30;
+      const progress = timeRemaining / maxTime;
+      
+      // Background circle
+      ctx.beginPath();
+      ctx.arc(x, y, radius, 0, 2 * Math.PI);
+      ctx.fillStyle = "rgba(0, 0, 0, 0.3)";
+      ctx.fill();
+      ctx.strokeStyle = "#333";
+      ctx.lineWidth = 2;
+      ctx.stroke();
+      
+      // Progress circle (fills counterclockwise like a countdown)
+      if (progress > 0) {
+        ctx.beginPath();
+        ctx.arc(x, y, radius - 3, -Math.PI/2, -Math.PI/2 + (2 * Math.PI * progress));
+        ctx.strokeStyle = progress > 0.3 ? "#00FF00" : progress > 0.1 ? "#FFFF00" : "#FF0000";
+        ctx.lineWidth = 6;
+        ctx.stroke();
+      }
+      
+      // Timer text
+      ctx.font = "24px 'Nova Square', monospace";
+      ctx.textAlign = "center";
+      ctx.fillStyle = progress > 0.3 ? "#00FF00" : progress > 0.1 ? "#FFFF00" : "#FF0000";
+      ctx.fillText(String(timeRemaining), x, y + 8);
+    }
+    
+    // Juicy score display with dynamic glow
+    // Vibrant score display in top left corner with RGB cycling high score
+    function renderScoreDisplay(ctx, score, mazeSize, x, y, currentTime) {
+      const highScores = getHighScores();
+      const highScore = highScores.length > 0 ? highScores[0].score : 0;
+      
+  ctx.shadowBlur = 0;
+      ctx.textAlign = "left";
+      
+      // Score - bright neon pink with glow
+  ctx.shadowColor = 'transparent';
+  ctx.shadowBlur = 0;
+      ctx.font = "26px 'Nova Square', monospace";
+      ctx.fillStyle = "#FF0080";
+      ctx.fillText(`Score: ${score}`, x, y);
+      
+      // High Score - RGB cycling with glow
+      const rgbTime = (currentTime / 1000) * 2; // 2 cycles per second
+      const r = Math.floor((Math.sin(rgbTime) + 1) * 127.5);
+      const g = Math.floor((Math.sin(rgbTime + 2) + 1) * 127.5);
+      const b = Math.floor((Math.sin(rgbTime + 4) + 1) * 127.5);
+      const rgbColor = `rgb(${r}, ${g}, ${b})`;
+      
+  ctx.shadowColor = 'transparent';
+  ctx.shadowBlur = 0;
+      ctx.font = "22px 'Nova Square', monospace";
+      ctx.fillStyle = rgbColor;
+      ctx.fillText(`High Score: ${highScore}`, x, y + 35);
+      
+      // Level - bright neon cyan with glow
+  ctx.shadowColor = 'transparent';
+  ctx.shadowBlur = 0;
+      ctx.font = "20px 'Nova Square', monospace";
+      ctx.fillStyle = "#00FFFF";
+      ctx.fillText(`Level: ${mazeSize}x${mazeSize}`, x, y + 65);
+      
+  ctx.shadowBlur = 0; // Reset shadow
+    }
+    
+    // High Score Management
+    function getHighScores() {
+      const scores = localStorage.getItem('shuffleRunnerHighScores');
+      return scores ? JSON.parse(scores) : [];
+    }
+    
+    function saveHighScore(score, level, mazeSize) {
+      const highScores = getHighScores();
+      const newScore = {
+        score: score,
+        level: level,
+        mazeSize: mazeSize,
+        date: new Date().toLocaleDateString()
+      };
+      
+      highScores.push(newScore);
+      highScores.sort((a, b) => b.score - a.score); // Sort by score descending
+      highScores.splice(5); // Keep only top 5
+      
+      localStorage.setItem('shuffleRunnerHighScores', JSON.stringify(highScores));
+      return highScores;
+    }
+    
+    function isNewHighScore(score) {
+      const highScores = getHighScores();
+      return highScores.length < 5 || score > highScores[highScores.length - 1].score;
+    }
+    
+    function renderLeaderboard(ctx, highScores, newScoreIndex = -1) {
+      const centerX = canvas.width / 2;
+      const startY = canvas.height / 2 - 100;
+      
+      // Game Over Title
+      ctx.font = "60px 'Nova Square', monospace";
+      ctx.textAlign = "center";
+      ctx.fillStyle = "#FF0000";
+  ctx.shadowColor = 'transparent';
+  ctx.shadowBlur = 0;
+      ctx.fillText("Game Over", centerX, startY);
+      
+  ctx.shadowBlur = 0;
+      
+      // High Scores List
+      for (let i = 0; i < highScores.length; i++) {
+        const score = highScores[i];
+        const y = startY + 60 + (i * 40);
+        const isNewScore = i === newScoreIndex;
+        
+        // Highlight new high score
+        if (isNewScore) {
+          ctx.fillStyle = "#00FFFF";
+          ctx.shadowColor = 'transparent';
+          ctx.shadowBlur = 0;
+        } else {
+          ctx.fillStyle = "#FF0000";
+          ctx.shadowBlur = 0;
+        }
+        
+        ctx.font = isNewScore ? "32px 'Nova Square', monospace" : "28px 'Nova Square', monospace";
+        ctx.fillText(`${i + 1}. ${score.score} Level(${score.mazeSize}x${score.mazeSize})`, centerX, y);
+      }
+      
+      ctx.shadowBlur = 0;
+      
+      // Instructions
+      ctx.font = "24px 'Nova Square', monospace";
+      ctx.fillStyle = "#00FF00";
+      ctx.fillText("Click to Play Again", centerX, startY + 280);
+    }
+    
+    // Point pellet system functions
+    function isDeadEnd(maze, tileX, tileY) {
+      // Must be a passable tile
+      if (!maze[tileY] || maze[tileY][tileX] === undefined || maze[tileY][tileX] > 0) return false;
+      
+      let openDirections = 0;
+      const directions = [
+        {dx: 0, dy: -1}, // up
+        {dx: 0, dy: 1},  // down
+        {dx: -1, dy: 0}, // left
+        {dx: 1, dy: 0}   // right
+      ];
+      
+      for (const dir of directions) {
+        const adjX = tileX + dir.dx;
+        const adjY = tileY + dir.dy;
+        // Check bounds and if adjacent tile is passable
+        if (adjY >= 0 && adjY < maze.length && adjX >= 0 && adjX < maze[0].length) {
+          if (maze[adjY][adjX] <= 0) {
+            openDirections++;
+          }
+        }
+      }
+      
+      // Dead end has exactly 1 open direction (the entrance)
+      return openDirections === 1;
+    }
+    
+    function spawnPellets(maze) {
+      // Prevent multiple spawning for same level
+      if (pelletsSpawned) {
+        console.log(`Level ${mazeLevel}: Pellets already spawned`);
+        return;
+      }
+      
+      pointPellets = []; // Clear existing pellets
+      timePellets = []; // Clear existing time pellets
+      speedPellets = []; // Clear existing speed pellets
+      
+      // Point pellets start at level 2, time pellets at level 5, speed pellets at level 7
+      if (mazeLevel < 2) {
+        console.log(`Level ${mazeLevel}: No pellets (tutorial level)`);
+        pelletsSpawned = true;
+        return;
+      }
+      
+      let deadEndCount = 0;
+      let pelletCount = 0;
+      let timePelletCount = 0;
+      let speedPelletCount = 0;
+      
+      for (let y = 1; y < maze.length - 1; y++) {
+        for (let x = 1; x < maze[0].length - 1; x++) {
+          if (isDeadEnd(maze, x, y)) {
+            deadEndCount++;
+            
+            // Determine pellet type based on level and chance
+            const rand = Math.random();
+            
+            if (mazeLevel >= 7 && rand < 0.03) { // 3% rare chance for speed pellets in dead ends from level 7+
+              speedPellets.push({
+                x: x * 25 + 12.5, // Center of tile
+                y: y * 25 + 12.5,
+                collected: false
+              });
+              speedPelletCount++;
+            } else if (mazeLevel >= 5 && rand < 0.08) { // 8% chance for time pellets from level 5+
+              timePellets.push({
+                x: x * 25 + 12.5, // Center of tile
+                y: y * 25 + 12.5,
+                collected: false
+              });
+              timePelletCount++;
+            } else if (mazeLevel >= 2 && rand < 0.15) { // 15% chance for point pellets from level 2+
+              pointPellets.push({
+                x: x * 25 + 12.5, // Center of tile
+                y: y * 25 + 12.5,
+                collected: false
+              });
+              pelletCount++;
+            }
+          }
+        }
+      }
+      
+      console.log(`Level ${mazeLevel}: Found ${deadEndCount} dead ends, spawned ${pelletCount} point pellets, ${timePelletCount} time pellets, ${speedPelletCount} speed pellets`);
+      pelletsSpawned = true; // Mark pellets as spawned for this level
+    }
+    
+    function checkPelletCollision(playerX, playerY) {
+      // Check point pellets
+      for (const pellet of pointPellets) {
+        if (!pellet.collected) {
+          const dx = playerX + 7.5 - pellet.x; // Player center
+          const dy = playerY + 7.5 - pellet.y;
+          const distance = Math.sqrt(dx * dx + dy * dy);
+          
+          if (distance < 10) { // Collision radius
+            pellet.collected = true;
+
+            // Trigger zoom pop effect
+            pelletZoomActive = true;
+            pelletZoomStartTime = performance.now();
+
+            // combo first
+            comboCount += 1;
+            comboMul = Math.min(3.0, 1.0 + 0.25 * (comboCount - 1)); // 1.0, 1.25, 1.5, ...
+            comboWindowUntil = performance.now() + COMBO_WINDOW_MS;
+
+            // score with multiplier
+            const base = 25;
+            const gained = Math.floor(base * comboMul);
+            gameScore += gained;
+
+            // FX
+            addPopup(`+${gained}`, playerX + 7.5, playerY - 15, "score"); // above player head
+            addParticles(pellet.x, pellet.y, "#ff4081", 14); // particles at pellet location
+            camKick = 8; // small camera kick
+            sfxPickup();
+            return true;
+          }
+        }
+      }
+      
+      // Check time pellets
+      for (const pellet of timePellets) {
+        if (!pellet.collected) {
+          const dx = playerX + 7.5 - pellet.x; // Player center
+          const dy = playerY + 7.5 - pellet.y;
+          const distance = Math.sqrt(dx * dx + dy * dy);
+          
+          if (distance < 10) { // Collision radius
+            pellet.collected = true;
+
+            // Trigger zoom pop effect
+            pelletZoomActive = true;
+            pelletZoomStartTime = performance.now();
+
+            // Add 5 seconds to countdown by adjusting startDate
+            startDate = new Date(startDate.getTime() + 5000); // add 5000ms to start time
+            addPopup("+5s", playerX + 7.5, playerY - 15, "time"); // above player head
+            addParticles(pellet.x, pellet.y, "#39ff14", 12); // particles at pellet location
+            camKick = 6; // small camera kick
+            sfxPickup();
+            return true;
+          }
+        }
+      }
+      
+      // Check speed pellets
+      for (const pellet of speedPellets) {
+        if (!pellet.collected) {
+          const dx = playerX + 7.5 - pellet.x; // Player center
+          const dy = playerY + 7.5 - pellet.y;
+          const distance = Math.sqrt(dx * dx + dy * dy);
+          
+          if (distance < 10) { // Collision radius
+            pellet.collected = true;
+            speedBoostActive = true;
+            speedBoostEndTime = Date.now() + 10000; // 10 seconds
+
+            addPopup("+Speed", playerX + 7.5, playerY - 15, "speed"); // above player head
+            addParticles(pellet.x, pellet.y, "#0099ff", 12); // particles at pellet location
+            camKick = 10; // medium camera kick
+            sfxPickup();
+            return true;
+          }
+        }
+      }
+      return false;
+    }
+    
+    function renderPellets(ctx, currentTime) {
+      pelletAnimTime += 0.05;
+      
+      // Render point pellets (pink)
+      for (const pellet of pointPellets) {
+        if (!pellet.collected) {
+          // Animated neon pink pellet with electric glow
+          const pulse = Math.sin(pelletAnimTime * 4) * 0.3 + 0.7; // 0.4 to 1.0
+          
+          ctx.shadowColor = 'transparent';
+          ctx.shadowBlur = 0;
+          ctx.fillStyle = "#ff4081"; // Bright neon pink to match score
+          ctx.beginPath();
+          ctx.arc(pellet.x, pellet.y, 4 * pulse, 0, 2 * Math.PI);
+          ctx.fill();
+          ctx.shadowBlur = 0;
+        }
+      }
+      
+      // Render time pellets (green)
+      for (const pellet of timePellets) {
+        if (!pellet.collected) {
+          // Animated neon green pellet with electric glow
+          const pulse = Math.sin(pelletAnimTime * 3) * 0.4 + 0.6; // Slightly different timing
+          
+          ctx.shadowColor = 'transparent';
+          ctx.shadowBlur = 0;
+          ctx.fillStyle = "#39ff14"; // Bright neon green
+          ctx.beginPath();
+          ctx.arc(pellet.x, pellet.y, 5 * pulse, 0, 2 * Math.PI); // Slightly bigger
+          ctx.fill();
+          ctx.shadowBlur = 0;
+        }
+      }
+      
+      // Render speed pellets (blue)
+      for (const pellet of speedPellets) {
+        if (!pellet.collected) {
+          // Animated neon blue pellet with electric glow
+          const pulse = Math.sin(pelletAnimTime * 5) * 0.3 + 0.7; // Faster pulse for speed theme
+          
+          ctx.shadowColor = 'transparent';
+          ctx.shadowBlur = 0;
+          ctx.fillStyle = "#0099ff"; // Bright neon blue
+          ctx.beginPath();
+          ctx.arc(pellet.x, pellet.y, 4 * pulse, 0, 2 * Math.PI);
+          ctx.fill();
+          ctx.shadowBlur = 0;
+        }
+      }
+    }
+
+    var maze = genMaze(currentMazeSize, currentMazeSize, 1, 1);
+    // Ensure goal is accessible
+    const goalTileX = currentMazeSize - 2;
+    const goalTileY = currentMazeSize - 2;
+    maze = ensureGoalAccessible(maze, goalTileX, goalTileY);
+    
+    // Spawn pellets after maze generation
+    spawnPellets(maze);
+    
+    console.log(maze)
+
+    // Initialize physics system
+    PhysicsAABB.setMaze(maze);
+    PhysicsAABB.setPose(25, 25);
+
+    var keys = [];
+    var lastTime = performance.now();
+
+    // Spring camera state
+    let camX = 25 + 7.5, camY = 25 + 7.5;          // current camera center in world
+    let camVX = 0, camVY = 0;        // camera velocity for the spring
+    const CAM_FOLLOW_OFFSET = {x: 7.5, y: 7.5}; // center on player rect
+    let camZeta = 0.85;            // damping ratio (snappy but smooth)
+    let camOmega = 12.0;           // natural frequency (higher = snappier)
+
+    // Player trail system - more subtle
+    const TRAIL_MAX = 6;
+    const TRAIL_MIN_SPEED = 220;   // higher threshold for more subtle trail
+    let trail = []; // array of {x,y,alpha,life}
+    let trailEmitT = 0;
+
+    // Check if user is mobile then calls proper functions for it
+    if (/Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent)) {
+      PhysicsAABB.configure({ MAX_SPEED: 240 }); // increased from 160 for faster mobile gameplay
+      camera.zoomTo(1000) // match cinematic ending zoom
+      animationSpeed = 2
+      disableScroll();
+      console.log("true")
+    }
+
+    // Debug overlay state
+    let showDebug = false;
+    let debugLastFPS = 60;
+    let debugFrameCount = 0;
+    let debugLastTime = performance.now();
+
+    function updateDebugFPS(currentTime) {
+      debugFrameCount++;
+      if (currentTime - debugLastTime >= 1000) {
+        debugLastFPS = Math.round(debugFrameCount * 1000 / (currentTime - debugLastTime));
+        debugFrameCount = 0;
+        debugLastTime = currentTime;
+      }
+    }
+
+    function renderDebugOverlay(dt, playerState) {
+      if (!showDebug) return;
+      
+      ctx.save();
+      ctx.setTransform(1, 0, 0, 1, 0, 0); // Reset transform for UI overlay
+      
+      // Apply game area scaling and centering for mobile
+      const gameArea = window.gameArea || { offsetX: 0, offsetY: 0, scale: 1 };
+      ctx.translate(gameArea.offsetX, gameArea.offsetY);
+      ctx.scale(gameArea.scale, gameArea.scale);
+      
+      ctx.fillStyle = "rgba(0, 0, 0, 0.7)";
+      ctx.fillRect(10, 10, 280, 140);
+      
+      ctx.fillStyle = "#00FF00";
+      ctx.font = "14px monospace";
+      const config = PhysicsAABB.getPose();
+      const physicsConfig = PhysicsAABB.getConfig ? PhysicsAABB.getConfig() : {};
+      
+      ctx.fillText(`FPS: ${debugLastFPS} | dt: ${(dt * 1000).toFixed(1)}ms`, 15, 30);
+      ctx.fillText(`vx: ${playerState.vx.toFixed(1)} | vy: ${playerState.vy.toFixed(1)}`, 15, 50);
+      ctx.fillText(`MAX_SPEED: ${physicsConfig.MAX_SPEED || 200}`, 15, 70);
+      ctx.fillText(`STEER: ${physicsConfig.STEER || 10.0}`, 15, 90);
+      ctx.fillText(`DRAG: ${physicsConfig.DRAG || 6.0}`, 15, 110);
+      
+      // CRT Filter status
+      ctx.fillStyle = (typeof window.crtEnabled !== 'undefined' && window.crtEnabled) ? "#FF00FF" : "#888888";
+      ctx.fillText(`CRT Filter: ${(typeof window.crtEnabled !== 'undefined' && window.crtEnabled) ? 'ON' : 'OFF'} (F2)`, 15, 130);
+      
+      ctx.restore();
+    }
+
+    function update() {
+      requestAnimationFrame(update);
+
+      // Calculate delta time and clamp to prevent frame spikes
+      const currentTime = performance.now();
+      const rawDt = (currentTime - lastTime) / 1000;
+      // More aggressive clamping and smoothing for stable movement
+      const dt = Math.min(Math.max(rawDt, 0.008), 0.025); // Clamp between ~40-120 FPS
+      lastTime = currentTime;
+
+      // Initialize warning effects variables at function scope
+      let scaleMultiplier = 1.0; // Default no scale change
+      let warningZoomMultiplier = 1.0; // Default no zoom change
+      let glowIntensity = 0; // For shadow glow effect
+      
+      updateDebugFPS(currentTime);
+
+      // Combo decay management
+      const nowMs = performance.now();
+      if (comboCount > 0 && nowMs > comboWindowUntil) {
+        comboCount = 0;
+        comboMul = 1.0;
+      }
+
+      // Get input vector from keyboard and joystick (reuse object)
+      gameInputVector(keys, joystick, inputVector);
+
+      // Step physics if game is active
+      let playerState = PhysicsAABB.getPose();
+      if (begin !== true && lose !== true && win !== true) {
+        // Handle speed boost timing (only during active gameplay)
+        if (speedBoostActive && speedBoostEndTime > 0 && Date.now() > speedBoostEndTime) {
+          speedBoostActive = false;
+          speedBoostEndTime = 0;
+          PhysicsAABB.configure({ MAX_SPEED: 300 }); // Reset to normal speed
+        } else if (speedBoostActive && speedBoostEndTime > 0) {
+          PhysicsAABB.configure({ MAX_SPEED: 450 }); // Boosted speed
+        } else {
+          // Ensure normal speed when no boost is active
+          PhysicsAABB.configure({ MAX_SPEED: 300 });
+        }
+        
+        playerState = PhysicsAABB.step(dt, inputVector.x, inputVector.y);
+        
+        // Spring camera follow
+        const targetX = playerState.x + CAM_FOLLOW_OFFSET.x;
+        const targetY = playerState.y + CAM_FOLLOW_OFFSET.y;
+
+        // Critically-damped-ish spring (semi-implicit)
+        const dx = targetX - camX;
+        const dy = targetY - camY;
+        const ax = camOmega*camOmega*dx - 2*camZeta*camOmega*camVX;
+        const ay = camOmega*camOmega*dy - 2*camZeta*camOmega*camVY;
+
+        camVX += ax * dt;
+        camVY += ay * dt;
+        camX  += camVX * dt;
+        camY  += camVY * dt;
+
+        camera.moveTo(camX, camY);
+      }
+
+      // Update trail system - more subtle
+      const speed = Math.hypot(playerState.vx, playerState.vy);
+      if (speed > TRAIL_MIN_SPEED) {
+        trailEmitT += dt;
+        if (trailEmitT >= 0.06) { // slower emission for subtlety
+          trail.push({ x: playerState.x, y: playerState.y, alpha: 0.2, life: 0.25 }); // lower alpha and shorter life
+          if (trail.length > TRAIL_MAX) trail.shift();
+          trailEmitT = 0;
+        }
+      }
+
+      // Decay trail
+      for (const g of trail) {
+        g.life  -= dt;
+        g.alpha  = Math.max(0, g.life / 0.25) * 0.2; // more subtle alpha
+      }
+      trail = trail.filter(g => g.life > 0);
+
+      // Win condition check - dynamic goal position based on current maze size
+      const playerTileX = Math.floor(playerState.x / 25);
+      const playerTileY = Math.floor(playerState.y / 25);
+      const goalTileX = currentMazeSize - 2;
+      const goalTileY = currentMazeSize - 2;
+      
+      if (playerTileX === goalTileX && playerTileY === goalTileY && !transitioningToNext) {
+        // Player completed the maze!
+        gameScore += 100;
+        mazeLevel++;
+        transitioningToNext = true;
+        showingScore = true;
+        scoreDisplayTime = currentTime;
+        
+        // CRT burst effect on level completion
+        if (typeof window.crtBurst === 'function') {
+          window.crtBurst(800); // Quick celebratory effect
+        }
+        
+        // Calculate next maze parameters
+        currentMazeSize = Math.floor(baseMazeSize * Math.pow(mazeSizeGrowth, mazeLevel - 1));
+        
+        // Every 4 levels, add 5 seconds to the base shuffle time
+        const levelBonus = Math.floor((mazeLevel - 1) / 4) * shuffleTimeBonus;
+        currentShuffleTime = baseShuffleTime + levelBonus;
+        
+        // Update goal position for next maze
+        goalX = (currentMazeSize - 2) * 25 + 12.5;
+        goalY = (currentMazeSize - 2) * 25 + 12.5;
+        
+        // Start cinematic transition after brief score display
+        setTimeout(() => {
+          begin = true;
+          cinematicTime = 0;
+          shuffleCount = 0;
+          lastShuffleTime = 0;
+          showingScore = false;
+          Wait = currentShuffleTime; // Reset shuffle timer to full time
+          pelletsSpawned = false; // Allow pellets to spawn for new level
+          // Reset speed boost
+          speedBoostActive = false;
+          speedBoostEndTime = 0;
+          PhysicsAABB.configure({ MAX_SPEED: 300 });
+        }, 1500); // Show score for 1.5 seconds
+      }
+
+      ctx.fillStyle = "#000000";
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      camera.begin();
+      
+      // Calculate shuffle scale animation
+      let shuffleScale = 1.0;
+      if (shuffleScaleActive) {
+        const elapsed = performance.now() - shuffleScaleStartTime;
+        const progress = Math.min(elapsed / shuffleScaleDuration, 1.0);
+        
+        if (progress >= 1.0) {
+          shuffleScaleActive = false;
+          shuffleScale = 1.0;
+        } else {
+          // Ease-out animation: quick pop out, slower return
+          const easeOut = 1 - Math.pow(1 - progress, 3);
+          shuffleScale = 1.0 + (shuffleScaleIntensity - 1.0) * (1 - easeOut);
+        }
+      }
+
+      // Calculate pellet zoom animation
+      let pelletZoom = 1.0;
+      if (pelletZoomActive) {
+        const elapsed = performance.now() - pelletZoomStartTime;
+        const progress = Math.min(elapsed / pelletZoomDuration, 1.0);
+        
+        if (progress >= 1.0) {
+          pelletZoomActive = false;
+          pelletZoom = 1.0;
+        } else {
+          // Simple: start normal, zoom to max, then back to normal 
+          // Progress 0 = normal, Progress 1 = normal, peak at 0.5
+          let zoomProgress;
+          if (progress < 0.5) {
+            zoomProgress = progress * 2; // 0 to 1 in first half
+          } else {
+            zoomProgress = (1.0 - progress) * 2; // 1 to 0 in second half  
+          }
+          const zoomAmount = (pelletZoomIntensity - 1.0) * zoomProgress;
+          pelletZoom = 1.0 + zoomAmount;
+        }
+      }
+      
+      // Apply world scale transform for warning effect (affects everything inside camera)
+      const combinedScale = scaleMultiplier * shuffleScale * pelletZoom;
+      if (combinedScale !== 1.0) {
+        const worldCenterX = (currentMazeSize / 2) * 25;
+        const worldCenterY = (currentMazeSize / 2) * 25;
+        
+        ctx.save();
+        ctx.translate(worldCenterX, worldCenterY);
+        ctx.scale(combinedScale, combinedScale);
+        ctx.translate(-worldCenterX, -worldCenterY);
+      }
+      
+      var endTime = new Date();
+      var timeDiff = endTime - startDate; //in ms
+      // strip the ms
+      timeDiff /= 1000;
+
+      // get seconds
+      var seconds = Math.round(timeDiff % 60);
+      //console.log(Wait + " sec");
+      if (seconds >= Wait && begin == false && !transitioningToNext && !lose) {
+        startDate = new Date();
+        Wait -= shuffleDecrement; // Decrease time for next shuffle (25->20->15->10->5)
+        
+        // Trigger shuffle scale animation
+        shuffleScaleActive = true;
+        shuffleScaleStartTime = performance.now();
+        
+        // Preserve current player position
+        const currentState = PhysicsAABB.getPose();
+        const currentTileX = Math.floor(currentState.x / 25);
+        const currentTileY = Math.floor(currentState.y / 25);
+        
+        maze = genMaze(currentMazeSize, currentMazeSize, 1, 1)
+        
+        // Ensure goal is accessible after generation
+        const goalTileX = currentMazeSize - 2;
+        const goalTileY = currentMazeSize - 2;
+        maze = ensureGoalAccessible(maze, goalTileX, goalTileY);
+        
+        // Don't spawn pellets here - wait for final maze at end of cinematic
+        
+        // Ensure player's current position is not in wall after maze regen
+        // Limit attempts to prevent infinite loops that cause stuttering
+        let attempts = 0;
+        while (maze[currentTileY] && maze[currentTileY][currentTileX] && maze[currentTileY][currentTileX] > 0 && attempts < 10) {
+          maze = genMaze(currentMazeSize, currentMazeSize, 1, 1);
+          maze = ensureGoalAccessible(maze, goalTileX, goalTileY);
+          // Don't spawn pellets during position fix attempts
+          attempts++;
+        }
+        
+        // If still in wall after attempts, move to nearest safe position
+        if (attempts >= 10) {
+          // Find nearest empty tile
+          for (let radius = 1; radius < 10; radius++) {
+            for (let dy = -radius; dy <= radius; dy++) {
+              for (let dx = -radius; dx <= radius; dx++) {
+                const testY = currentTileY + dy;
+                const testX = currentTileX + dx;
+                if (testY >= 0 && testY < maze.length && testX >= 0 && testX < maze[0].length && maze[testY][testX] <= 0) {
+                  PhysicsAABB.setPose(testX * 25 + 12, testY * 25 + 12);
+                  PhysicsAABB.setMaze(maze);
+                  return; // Exit early to prevent further processing
+                }
+              }
+            }
+          }
+        }
+        
+        PhysicsAABB.setMaze(maze);
+        // Keep player at their current position (don't reset to spawn)
+        PhysicsAABB.setPose(currentState.x, currentState.y);
+      }
+      //ctx.fillRect(0, 0, 300, 300);
+      
+      // Optimized maze rendering - only render visible tiles
+      const viewport = camera.viewport;
+      const startCol = Math.max(0, Math.floor(viewport.left / 25));
+      const endCol = Math.min(maze[0].length - 1, Math.ceil(viewport.right / 25));
+      const startRow = Math.max(0, Math.floor(viewport.top / 25));
+      const endRow = Math.min(maze.length - 1, Math.ceil(viewport.bottom / 25));
+      
+      // Calculate warning pulse effect based on time remaining
+      const timeRemaining = Wait - seconds;
+      const warningThreshold = 3; // Start pulsing when 3 seconds left
+      
+      if (timeRemaining <= warningThreshold && timeRemaining > 0 && !begin && !lose && !transitioningToNext) {
+        // Pulse gets faster and more intense as time runs out
+        const urgency = 1 - (timeRemaining / warningThreshold); // 0 to 1
+        const pulseSpeed = 0.5 + urgency * 1.5; // 0.5 to 2 Hz (much slower)
+        const pulseValue = Math.sin(currentTime / 1000 * pulseSpeed * Math.PI * 2) * 0.5 + 0.5; // 0 to 1
+        
+        // Scale effect: oscillate between 0.97 and 1.03 (±0.03 from center)
+        scaleMultiplier = 1.0 + (pulseValue - 0.5) * 0.06 * urgency; // Scale by urgency
+        
+        // Glow effect: more visible shadow glow
+        glowIntensity = pulseValue * urgency * 0.8; // Max 80% intensity (increased from 30%)
+        
+        // Add zoom effect - gradually zoom in as urgency increases
+        warningZoomMultiplier = 1.0 + urgency * 0.15; // Up to 15% zoom in
+      }
+      
+      // Background music is now started on page load
+      
+      for (var i = startRow; i <= endRow; i++) {
+        var row = maze[i];
+        for (var j = startCol; j <= endCol; j++) {
+          if (row[j] <= 0) {
+            // Dynamic goal and start positions based on current maze size
+            const goalTileX = currentMazeSize - 2;
+            const goalTileY = currentMazeSize - 2;
+            
+            // Remove glow/shadow effect
+            ctx.shadowColor = 'transparent';
+            ctx.shadowBlur = 0;
+            
+            if (i == goalTileY && j == goalTileX) {
+              ctx.fillStyle = "#FF0000"; // Red goal
+            } else if (i == 1 && j == 1) {
+              ctx.fillStyle = "#00FF00"; // Green start
+            } else {
+              ctx.fillStyle = "#CFCFCF"; // Regular path
+            }
+            
+            ctx.fillRect(25 * j, 25 * i, 27, 27);
+            
+            // Reset shadow after drawing
+            if (glowIntensity > 0) {
+              ctx.shadowBlur = 0;
+            }
+          }
+        }
+      }
+      if (begin == true && beginCount != true) {
+        // Cinematic camera sequence (only when countdown hasn't started)
+        cinematicTime += dt;
+        
+        // Fade in canvas as cinematic starts
+        const fadeProgress = Math.min(cinematicTime / 1.0, 1.0); // fade in over 1 second
+        canvas.style.opacity = fadeProgress;
+        
+        // Single continuous motion: exit -> center -> entrance
+        const progress = Math.min(cinematicTime / cinematicTotalDuration, 1.0);
+        
+        // Update maze center for current maze size
+        mazeCenter.x = (currentMazeSize / 2) * 25;
+        mazeCenter.y = (currentMazeSize / 2) * 25;
+        
+        // Continuous path interpolation (never stops)
+        const pathT = Math.pow(progress, 2); // ease in for entire motion
+        
+        // Position: smooth curve from exit through center to entrance
+        let camX, camY;
+        if (progress <= 0.5) {
+          // First half: exit to center
+          const t = progress * 2;
+          camX = goalX + (mazeCenter.x - goalX) * t;
+          camY = goalY + (mazeCenter.y - goalY) * t;
+        } else {
+          // Second half: center to entrance (continuous)
+          const t = (progress - 0.5) * 2;
+          camX = mazeCenter.x + (startX - mazeCenter.x) * t;
+          camY = mazeCenter.y + (startY - mazeCenter.y) * t;
+        }
+        
+        // Zoom: smooth continuous curve (zoom out then in) - closer zoom
+        let zoom;
+        if (progress <= 0.5) {
+          // Zoom out smoothly (less dramatic)
+          const t = progress * 2;
+          zoom = 1000 + (2200 - 1000) * Math.pow(t, 2); // reduced from 3000 to 2200
+        } else {
+          // Zoom in smoothly  
+          const t = (progress - 0.5) * 2;
+          zoom = 2200 + (1000 - 2200) * Math.pow(t, 2); // reduced from 3000 to 2200
+        }
+        
+        // Epilepsy-safe maze shuffling during middle portion - once per second
+        if (progress >= 0.4 && progress <= 0.6 && shuffleCount < 3) {
+          if (cinematicTime - lastShuffleTime >= 1.0) { // 1 second intervals instead of 0.4
+            // Trigger shuffle scale animation for cinematic
+            shuffleScaleActive = true;
+            shuffleScaleStartTime = performance.now();
+            
+            maze = genMaze(currentMazeSize, currentMazeSize, 1, 1);
+            const goalTileX = currentMazeSize - 2;
+            const goalTileY = currentMazeSize - 2;
+            maze = ensureGoalAccessible(maze, goalTileX, goalTileY);
+            // Don't spawn pellets during shuffle - wait for final maze
+            PhysicsAABB.setMaze(maze);
+            shuffleCount++;
+            lastShuffleTime = cinematicTime;
+          }
+        }
+        
+        camera.moveTo(camX, camY);
+        camera.zoomTo(zoom);
+        
+        if (progress >= 1.0) {
+          // Cash out combo before resetting to new maze
+          if (comboCount > 0) {
+            const bonus = Math.floor(comboCount * 50 * comboMul);
+            addPopup(player.x, player.y, `Combo x${comboCount}!`, hueColor(50));
+            addPopup(player.x, player.y + 20, `+${bonus} points!`, hueColor(60));
+            addParticles(player.x, player.y, hueColor(55), 15);
+            camKick = 25; // big camera kick for combo cashout
+            score += bonus;
+            comboCount = 0;
+            comboMul = 1;
+            comboWindowUntil = 0;
+          }
+          
+          // Cinematic complete - ensure maze is good for player spawn
+          while (maze[Math.floor(startY / 25)][Math.floor(startX / 25)] > 0) {
+            maze = genMaze(currentMazeSize, currentMazeSize, 1, 1);
+            const goalTileX = currentMazeSize - 2;
+            const goalTileY = currentMazeSize - 2;
+            maze = ensureGoalAccessible(maze, goalTileX, goalTileY);
+          }
+          spawnPellets(maze);
+          PhysicsAABB.setMaze(maze);
+          
+          // Reset player to start position for next maze
+          PhysicsAABB.setPose(startX, startY);
+          transitioningToNext = false;
+          waitClick = true;
+          
+          // Start text animation
+          if (!textAnimActive) {
+            textAnimActive = true;
+            textAnimStartTime = currentTime;
+          }
+        }
+      }
+      
+      // Render subtle trail ghosts before player
+      for (const g of trail) {
+        ctx.fillStyle = `rgba(0, 80, 255, ${g.alpha.toFixed(3)})`;
+        ctx.fillRect(g.x + 2, g.y + 2, 11, 11); // slightly smaller and offset
+      }
+      
+      // Check pellet collision (only during active gameplay)
+      if (begin !== true && lose !== true && !transitioningToNext) {
+        checkPelletCollision(playerState.x, playerState.y);
+      }
+      
+      // Render pellets before player but within camera view
+      renderPellets(ctx, currentTime);
+      
+      // Optimized player rendering
+      ctx.fillStyle = "#0000FF";
+      ctx.fillRect(playerState.x, playerState.y, 15, 15);
+      
+      // Update and render FX (popups, particles, etc.) - inside camera transform
+      updateAndRenderFX(ctx, dt, currentTime);
+      
+      // Handle camera zoom for non-cinematic scenes
+      if (!begin || beginCount == true) {
+        // Set base zoom for normal gameplay and countdown
+        let baseZoom = 1000; // Match cinematic ending zoom for seamless transition
+        
+        // decay camera kick
+        if (camKick > 0) camKick = Math.max(0, camKick - 6*dt);
+        // apply as a multiplicative zoom tweak, including warning zoom
+        const kickScale = 1 + 0.04 * camKick;
+        const finalZoom = baseZoom * kickScale * warningZoomMultiplier;
+        camera.zoomTo(finalZoom);
+      }
+      
+      // Restore world scale transform if it was applied
+      if (combinedScale !== 1.0) {
+        ctx.restore();
+      }
+      
+      camera.end();
+      
+      renderDebugOverlay(dt, playerState);
+      
+      if (begin == true && beginCount != true && waitClick == true && cinematicTime >= cinematicTotalDuration && textAnimActive) {
+        // Dynamic title based on level
+        const titleText = mazeLevel === 1 ? "ShuffleRunner" : `Level: ${currentMazeSize}x${currentMazeSize}`;
+        const centerX = 500; // Base game width / 2
+        const centerY = 300; // Base game height / 2
+        
+        // Tech-y animated title with aesthetic colors
+        renderAnimatedText(ctx, titleText, centerX, centerY, textAnimStartTime, currentTime, 60, "aesthetic");
+        
+        // Show "Click to Start" with RGB flashing after title animation
+        const titleDelay = 2000; // Show after title animation (reduced for faster reveal)
+        if (currentTime - textAnimStartTime > titleDelay) {
+          // Add pulsing scale effect
+          const pulseTime = (currentTime - textAnimStartTime - titleDelay) / 1000;
+          const pulseScale = 1 + Math.sin(pulseTime * 3) * 0.15; // pulse between 0.85x and 1.15x
+          
+          ctx.save();
+          ctx.translate(centerX, centerY + 120);
+          ctx.scale(pulseScale, pulseScale);
+          ctx.translate(-centerX, -(centerY + 120));
+          
+          renderAnimatedText(ctx, "Click to Start", centerX, centerY + 120, textAnimStartTime + titleDelay, currentTime, 32, "rgb");
+          
+          ctx.restore();
+        }
+      }
+      
+      // Score display in top left corner (always visible during gameplay)
+      if (!begin && !lose) {
+        const safeMargin = 20;
+        renderScoreDisplay(ctx, gameScore, currentMazeSize, safeMargin, 35, currentTime);
+      }
+      
+      // Show score celebration when completing a maze with extra juice
+      if (showingScore) {
+        const celebrationTime = (currentTime - scoreDisplayTime) / 1000;
+        const pulseScale = 1 + Math.sin(celebrationTime * 8) * 0.1;
+        
+        ctx.save();
+        const centerX = 500; // Base game center
+        const centerY = 300;
+        ctx.translate(centerX, centerY);
+        ctx.scale(pulseScale, pulseScale);
+        ctx.translate(-centerX, -centerY);
+        
+        // Multi-layer glow effect for celebration
+        for (let i = 0; i < 4; i++) {
+          ctx.shadowColor = "#00FFFF";
+          ctx.shadowBlur = 20 - i * 4;
+          ctx.font = "48px 'Nova Square', monospace";
+          ctx.textAlign = "center";
+          ctx.fillStyle = `rgba(0, 255, 255, ${1 - i * 0.2})`;
+          ctx.fillText(`+100 Points!`, centerX, centerY - 50);
+        }
+        
+        ctx.shadowBlur = 0;
+        ctx.font = "36px 'Nova Square', monospace";
+        ctx.fillStyle = "#00FF00";
+        ctx.fillText(`Score: ${gameScore}`, centerX, centerY + 10);
+        ctx.fillText(`Level ${mazeLevel}`, centerX, centerY + 60);
+        
+        ctx.restore();
+      }
+      
+      //console.log(waitClick)
+      if (begin != true && lose == false && !transitioningToNext) {
+        // Juicy circular timer in top right (with safe area)
+        const timerX = 1000 - 50; // Base game width - margin
+        const timerY = 50;
+        renderJuicyTimer(ctx, Wait - seconds, currentShuffleTime, timerX, timerY);
+        
+        // Combo counter to the left of timer
+        if (comboCount > 0) {
+          const comboX = timerX - 120; // Position to left of timer
+          const comboY = timerY;
+          
+          ctx.fillStyle = "#FFD700"; // Gold color
+          ctx.font = `${24 * scale}px monospace`;
+          ctx.textAlign = "center";
+          ctx.fillText(`Combo x${comboCount}`, comboX * scale, comboY * scale);
+          ctx.textAlign = "left"; // Reset alignment
+        }
+      }
+      if (Wait < 0) {
+        if (!showingLeaderboard) {
+          // Save high score and show leaderboard
+          currentHighScores = saveHighScore(gameScore, mazeLevel - 1, currentMazeSize);
+          newHighScoreIndex = currentHighScores.findIndex(score => 
+            score.score === gameScore && score.level === mazeLevel - 1 && score.mazeSize === currentMazeSize
+          );
+          showingLeaderboard = true;
+          gameOverShuffleTimer = currentTime; // Start game over shuffle timer
+          
+          // CRT burst effect on game over
+          if (typeof window.crtBurst === 'function') {
+            window.crtBurst(2000); // 2 second dramatic effect
+          }
+        }
+        
+        // Epilepsy-safe game over shuffling - once per second to show maze is "too fast to solve"
+        if (currentTime - gameOverShuffleTimer >= 1000) { // 1 second intervals
+          // Trigger shuffle scale animation
+          shuffleScaleActive = true;
+          shuffleScaleStartTime = performance.now();
+          
+          maze = genMaze(currentMazeSize, currentMazeSize, 1, 1);
+          const goalTileX = currentMazeSize - 2;
+          const goalTileY = currentMazeSize - 2;
+          maze = ensureGoalAccessible(maze, goalTileX, goalTileY);
+          spawnPellets(maze);
+          PhysicsAABB.setMaze(maze);
+          gameOverShuffleTimer = currentTime;
+        }
+        
+        // Render leaderboard
+        renderLeaderboard(ctx, currentHighScores, newHighScoreIndex);
+        lose = true;
+      }
+      if (dispText != "None") {
+        // I was going to have something Here, but I ran out of time, so I just hard coded text in
+
+      }
+      if (beginCount == true) {
+        ctx.font = "60px 'Nova Square', monospace";
+        ctx.textAlign = "center";
+        ctx.fillStyle = "#FF0000";
+        const centerX = 500;
+        const centerY = 300;
+        if (CountDown >= 1) {
+          ctx.fillText(Math.floor(CountDown), centerX, centerY);
+        } else if (CountDown <= 0 && CountDown > -2) {
+          ctx.fillText("GO!", centerX, centerY);
+          // Ensure normal speed when gameplay starts
+          speedBoostActive = false;
+          speedBoostEndTime = 0;
+          PhysicsAABB.configure({ MAX_SPEED: 300 });
+        }
+        if (CountDown < -2) {
+          // Synchronize both timers when gameplay actually starts
+          startDate = new Date();
+          Wait = currentShuffleTime; // Start with the current shuffle time
+          begin = false;
+          beginCount = false;
+        }
+        CountDown -= .020
+      }
+
+    }
+
+    function doMouseDown(event) {
+      // Only allow cinematic start if we're in the proper state and cinematic is complete
+      if (begin == true && waitClick == true && cinematicTime >= cinematicTotalDuration) {
+        waitClick = false;
+        beginCount = true;
+        const playerState = PhysicsAABB.getPose();
+        camera.moveTo(playerState.x + 6.5, playerState.y + 6.5);
+      }
+      
+      // Restart game when player loses
+      if (lose == true) {
+        waitClick = false;
+        // Reset all game state
+        gameScore = 0;
+        mazeLevel = 1;
+        currentMazeSize = baseMazeSize;
+        currentShuffleTime = baseShuffleTime;
+        goalX = (currentMazeSize - 2) * 25 + 12.5;
+        goalY = (currentMazeSize - 2) * 25 + 12.5;
+        transitioningToNext = false;
+        showingScore = false;
+        showingLeaderboard = false;
+        newHighScoreIndex = -1;
+        pelletsSpawned = false; // Allow pellets to spawn for new game
+        // Reset speed boost
+        speedBoostActive = false;
+        speedBoostEndTime = 0;
+        PhysicsAABB.configure({ MAX_SPEED: 300 });
+        gameOverShuffleTimer = 0;
+        
+        // Reset game state
+        lose = false;
+        begin = true;
+        cinematicTime = 0;
+        shuffleCount = 0;
+        lastShuffleTime = 0;
+        Wait = currentShuffleTime;
+        startDate = new Date();
+        pelletsSpawned = false; // Allow pellets to spawn for new game
+        // Reset speed boost
+        speedBoostActive = false;
+        speedBoostEndTime = 0;
+        PhysicsAABB.configure({ MAX_SPEED: 300 });
+        
+        // Generate new maze and reset player
+        maze = genMaze(currentMazeSize, currentMazeSize, 1, 1);
+        const goalTileX = currentMazeSize - 2;
+        const goalTileY = currentMazeSize - 2;
+        maze = ensureGoalAccessible(maze, goalTileX, goalTileY);
+        spawnPellets(maze);
+        PhysicsAABB.setMaze(maze);
+        PhysicsAABB.setPose(startX, startY);
+      }
+    }
+
+
+    update();
+
+    document.body.addEventListener("keydown", function(e) {
+      keys[e.keyCode] = true;
+      
+      // Instant game over with Delete key
+      if (e.keyCode === 46) { // Delete key
+        Wait = -1; // Force game over
+        e.preventDefault();
+      }
+      
+      // Debug controls
+      if (e.keyCode === 112) { // F1
+        showDebug = !showDebug;
+        e.preventDefault();
+      }
+      
+      // CRT Filter toggle with F2
+      if (e.keyCode === 113) { // F2
+        if (typeof window.toggleCRT === 'function') {
+          window.toggleCRT();
+        }
+        e.preventDefault();
+      }
+      
+      if (showDebug) {
+        const currentConfig = PhysicsAABB.getConfig();
+        let newConfig = {};
+        let changed = false;
+        
+        if (e.keyCode === 191) { // "/" - increase STEER
+          newConfig.STEER = Math.min(currentConfig.STEER + 0.5, 20);
+          changed = true;
+        }
+        if (e.keyCode === 186) { // ";" - decrease STEER  
+          newConfig.STEER = Math.max(currentConfig.STEER - 0.5, 0.5);
+          changed = true;
+        }
+        if (e.keyCode === 222) { // "'" - increase DRAG
+          newConfig.DRAG = Math.min(currentConfig.DRAG + 0.5, 15);
+          changed = true;
+        }
+        if (e.keyCode === 59) { // semicolon on some browsers - decrease DRAG
+          newConfig.DRAG = Math.max(currentConfig.DRAG - 0.5, 0.5);
+          changed = true;
+        }
+        if (e.keyCode === 189) { // "-" - decrease MAX_SPEED
+          newConfig.MAX_SPEED = Math.max(currentConfig.MAX_SPEED - 10, 50);
+          changed = true;
+        }
+        if (e.keyCode === 187) { // "=" - increase MAX_SPEED  
+          newConfig.MAX_SPEED = Math.min(currentConfig.MAX_SPEED + 10, 400);
+          changed = true;
+        }
+        
+        if (changed) {
+          PhysicsAABB.configure(newConfig);
+          console.log('Physics config:', PhysicsAABB.getConfig());
+          e.preventDefault();
+        }
+      }
+    });
+    document.body.addEventListener("keyup", function(e) {
+      keys[e.keyCode] = false;
+    });
+    document.body.addEventListener("click", doMouseDown);
+    document.body.addEventListener("touchstart", doMouseDown);
+    document.body.addEventListener("touchmove", function move() {
+
+    });
+  </script>
+</body>
+
+</html>
