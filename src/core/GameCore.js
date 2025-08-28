@@ -512,25 +512,29 @@ class GameCore {
     }
 
     handleGhostCollision(ghost) {
-        console.log("[GameCore] Player collided with ghost!");
+        console.log("[GameCore] Player collided with ghost! Applying new consequences.");
 
-        // Increase horror
-        this.systems.horror.horrorLevel = Math.min(1.0, this.systems.horror.horrorLevel + 0.1);
+        // 1. Subtract points and show toaster text
+        this.gameScore = Math.max(0, this.gameScore - 100);
+        const playerPos = this.entities.player.getCenter();
+        this.systems.effects.addPopup("-100", playerPos.x, playerPos.y, "score");
 
-        // Play a sound
+        // 2. Shake the screen
+        this.systems.camera.addCameraKick(2.5);
+
+        // 3. Play collision sound
         this.systems.audio.sfxBuzz();
 
-        // Clean up the ghost's resources (e.g., audio)
+        // 4. Clean up the ghost's resources (e.g., audio)
         ghost.destroy();
-
-        // Find and remove the specific ghost that collided
         const index = this.activeGhosts.indexOf(ghost);
         if (index > -1) {
             this.activeGhosts.splice(index, 1);
         }
 
-        // Trigger an immediate reshuffle
-        this.shuffleMaze();
+        // 5. Teleport player back to the start of the level
+        this.entities.player.reset(25, 25);
+        this.systems.physics.setPose(25, 25);
     }
 
     getUIData() {

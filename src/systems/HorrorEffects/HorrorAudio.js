@@ -28,6 +28,8 @@ class HorrorAudio extends HorrorEffect {
             return sound;
         });
 
+        this.fadingOutSounds = []; // Array to manage sounds that are fading out
+
         this._pickWeightedIndex = (weights) => {
             const w = Array.isArray(weights) && weights.length === this.scaryAmbienceFiles.length
                 ? weights.slice()
@@ -43,11 +45,12 @@ class HorrorAudio extends HorrorEffect {
     }
 
     onNewLevel(level) {
-        this.scaryAmbienceSounds.forEach((sound) => {
-            sound.pause();
-            sound.currentTime = 0;
+        // Fade out any currently playing ambient sounds instead of stopping abruptly
+        this.scaryAmbienceSounds.forEach(sound => {
+            if (!sound.paused) {
+                this.fadeOutSound(sound);
+            }
         });
-        // Music state will be handled by the update loop based on horror level
     }
 
     onMazeReshuffle(maze) {
@@ -64,6 +67,18 @@ class HorrorAudio extends HorrorEffect {
     }
 
     update(intensity, dt) {
+        // Process sounds that are fading out
+        for (let i = this.fadingOutSounds.length - 1; i >= 0; i--) {
+            const fading = this.fadingOutSounds[i];
+            fading.sound.volume -= fading.fadeSpeed * dt;
+
+            if (fading.sound.volume <= 0) {
+                fading.sound.pause();
+                fading.sound.volume = this.soundVolume; // Reset for next time
+                this.fadingOutSounds.splice(i, 1);
+            }
+        }
+
         const now = this.system.elapsed;
 
         // Ambience is independent of shuffle event, depends only on music being off
@@ -111,12 +126,24 @@ class HorrorAudio extends HorrorEffect {
         }
     }
 
+    fadeOutSound(sound, duration = 1.0) {
+        // Avoid adding the same sound multiple times
+        if (this.fadingOutSounds.some(f => f.sound === sound)) return;
+
+        this.fadingOutSounds.push({
+            sound: sound,
+            fadeSpeed: sound.volume / duration,
+        });
+    }
+
     onGameOver() {
         console.log("[HorrorAudio] Game Over");
         this.musicIsOff = false;
+        // Fade out any currently playing ambient sounds
         this.scaryAmbienceSounds.forEach(sound => {
-            sound.pause();
-            sound.currentTime = 0;
+            if (!sound.paused) {
+                this.fadeOutSound(sound);
+            }
         });
     }
 }

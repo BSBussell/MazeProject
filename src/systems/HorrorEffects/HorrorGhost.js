@@ -27,14 +27,20 @@ class HorrorGhost extends HorrorEffect {
                 console.log(`[HorrorGhost] Spawning ghost (cost: ${spawnCost.toFixed(3)}). Total ghosts: ${numActiveGhosts + 1}`);
                 this.system.horrorLevel -= spawnCost;
 
-                // Select a random path from the stored paths
-                const pathIndex = Math.floor(Math.random() * game.playerPaths.length);
-                const path = game.playerPaths[pathIndex];
+                let ghost;
+                // 20% chance to spawn a "cosmic clone" that follows the player
+                if (Math.random() < 0.2) {
+                    console.log("[HorrorGhost] Spawning a COSMIC CLONE!");
+                    ghost = new Ghost(null, true); // No path, isClone = true
+                } else {
+                    // Select a random path from the stored paths
+                    const pathIndex = Math.floor(Math.random() * game.playerPaths.length);
 
-                // Remove the used path to prevent multiple ghosts from following the exact same track
-                const chosenPath = game.playerPaths.splice(pathIndex, 1)[0];
+                    // Remove the used path to prevent multiple ghosts from following the exact same track
+                    const chosenPath = game.playerPaths.splice(pathIndex, 1)[0];
+                    ghost = new Ghost(chosenPath, false);
+                }
 
-                const ghost = new Ghost(chosenPath);
                 game.activeGhosts.push(ghost);
 
                 numActiveGhosts++; // Increment for the next iteration's cost calculation
