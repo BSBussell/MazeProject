@@ -94,6 +94,11 @@ class HorrorAudio extends HorrorEffect {
         const randomIndex = this._pickWeightedIndex(this.scaryAmbienceWeights);
         const sound = this.scaryAmbienceSounds[randomIndex];
 
+        // Do not play a sound that is currently fading out.
+        if (this.fadingOutSounds.some(f => f.sound === sound)) {
+            return;
+        }
+
         // As intensity approaches 1, cooldown approaches soundCooldownMin.
         // As intensity approaches 0.4 (the minimum to be here), cooldown approaches soundCooldownMax.
         const intensityRange = 1.0 - 0.4;
@@ -127,12 +132,14 @@ class HorrorAudio extends HorrorEffect {
     }
 
     fadeOutSound(sound, duration = 1.0) {
-        // Avoid adding the same sound multiple times
-        if (this.fadingOutSounds.some(f => f.sound === sound)) return;
+        // Don't try to fade a sound that's already silent or already fading.
+        if (sound.volume === 0 || this.fadingOutSounds.some(f => f.sound === sound)) {
+            return;
+        }
 
         this.fadingOutSounds.push({
             sound: sound,
-            fadeSpeed: sound.volume / duration,
+            fadeSpeed: sound.volume / duration, // Calculate speed based on current volume
         });
     }
 

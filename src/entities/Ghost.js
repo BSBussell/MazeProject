@@ -9,6 +9,14 @@ class Ghost {
         this.x = startPos.x;
         this.y = startPos.y;
 
+        if (this.isClone) {
+            this.spawnTime = performance.now();
+            this.spawnFlickerDuration = 1000; // 1 second
+            this.flickerOn = true;
+            this.flickerRate = 0.08; // Flicker every 0.08 seconds
+            this.flickerTimer = this.flickerRate;
+        }
+
         this.width = 15;
         this.height = 15;
         this.active = true;
@@ -38,13 +46,8 @@ class Ghost {
                 const nextPos = playerPath[targetIndex];
                 this.x = nextPos.x;
                 this.y = nextPos.y;
-            } else {
-                // Stay at player's start until delay is met
-                if (playerPath.length > 0) {
-                    this.x = playerPath[0].x;
-                    this.y = playerPath[0].y;
-                }
             }
+            // If delay is not met, the clone simply doesn't move from its spawn position.
         } else {
             // Original path-following logic
             if (!this.path || this.path.length === 0) {
@@ -67,6 +70,20 @@ class Ghost {
         // Manage ambient sound based on visibility
         if (camera) {
             this.manageAmbientSound(camera);
+        }
+
+        // Update the flicker state timer if applicable
+        if (this.isClone && this.spawnTime) {
+            const timeSinceSpawn = performance.now() - this.spawnTime;
+            if (timeSinceSpawn < this.spawnFlickerDuration) {
+                this.flickerTimer -= dt;
+                if (this.flickerTimer <= 0) {
+                    this.flickerOn = !this.flickerOn;
+                    this.flickerTimer = this.flickerRate;
+                }
+            } else {
+                this.flickerOn = true; // Ensure it's solid after the flicker period
+            }
         }
 
         // Tween volume towards target
@@ -132,7 +149,19 @@ class Ghost {
             return;
         }
 
-        ctx.fillStyle = "rgba(0, 0, 255, 0.5)"; // Transparent blue
+        // Handle spawn flicker for clones
+        if (this.isClone && !this.flickerOn) {
+            // If the flicker state is off, don't render.
+            return;
+        }
+
+        // Render clones in a different color for debugging/verification
+        if (this.isClone) {
+            ctx.fillStyle = "rgba(255, 0, 0, 0.6)"; // Transparent red
+        } else {
+            ctx.fillStyle = "rgba(0, 0, 255, 0.5)"; // Transparent blue
+        }
+
         ctx.fillRect(this.x, this.y, this.width, this.height);
     }
 

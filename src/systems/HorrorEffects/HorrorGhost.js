@@ -9,6 +9,17 @@ class HorrorGhost extends HorrorEffect {
         const game = window.game; // Access the global game core
         if (!game) return;
 
+        // 1. Despawn any active cosmic clones from the PREVIOUS round.
+        for (let i = game.activeGhosts.length - 1; i >= 0; i--) {
+            const ghost = game.activeGhosts[i];
+            if (ghost.isClone) {
+                ghost.destroy();
+                game.activeGhosts.splice(i, 1);
+                console.log("[HorrorGhost] Despawned a cosmic clone on shuffle.");
+            }
+        }
+
+        // 2. Spawn new ghosts for the CURRENT round.
         const intensity = this.system.getIntensity();
         if (intensity <= this.triggerIntensity || game.playerPaths.length === 0) {
             return;
