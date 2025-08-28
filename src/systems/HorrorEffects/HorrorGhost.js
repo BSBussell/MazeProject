@@ -10,24 +10,42 @@ class HorrorGhost extends HorrorEffect {
         if (!game) return;
 
         const intensity = this.system.getIntensity();
+        if (intensity <= this.triggerIntensity || game.playerPaths.length === 0) {
+            return;
+        }
 
-        // Check conditions for spawning a ghost
-        if (
-            intensity > this.triggerIntensity &&
-            this.system.horrorLevel >= this.cost &&
-            game.playerPaths.length > 0
-        ) {
-            // 30% chance to spawn to avoid being too predictable
-            if (Math.random() < 0.3) {
-                console.log("[HorrorGhost] Spawning ghost.");
-                this.system.horrorLevel -= this.cost;
+        const baseCost = this.cost;
+        let numActiveGhosts = game.activeGhosts.length;
+
+        // Loop to allow multiple ghosts to spawn, with diminishing costs
+        while (true) {
+            // Calculate spawn cost with diminishing returns
+            const spawnCost = numActiveGhosts > 0 ? baseCost / numActiveGhosts : baseCost;
+
+            // Check if we can afford to spawn and if a random chance passes
+            if (this.system.horrorLevel >= spawnCost && Math.random() < 0.4) {
+                console.log(`[HorrorGhost] Spawning ghost (cost: ${spawnCost.toFixed(3)}). Total ghosts: ${numActiveGhosts + 1}`);
+                this.system.horrorLevel -= spawnCost;
 
                 // Select a random path from the stored paths
                 const pathIndex = Math.floor(Math.random() * game.playerPaths.length);
                 const path = game.playerPaths[pathIndex];
 
-                const ghost = new Ghost(path);
+                // Remove the used path to prevent multiple ghosts from following the exact same track
+                const chosenPath = game.playerPaths.splice(pathIndex, 1)[0];
+
+                const ghost = new Ghost(chosenPath);
                 game.activeGhosts.push(ghost);
+
+                numActiveGhosts++; // Increment for the next iteration's cost calculation
+
+                // If we run out of paths, stop.
+                if (game.playerPaths.length === 0) {
+                    break;
+                }
+            } else {
+                // Stop if we can't afford it or fail the chance roll
+                break;
             }
         }
     }

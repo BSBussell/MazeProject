@@ -7,8 +7,9 @@ class HorrorCorruptMaze extends HorrorEffect {
     }
 
     onMazeReshuffle(maze) {
-        if (!maze || !maze.data) {
-            console.warn("[HorrorCorruptMaze] Maze data not available.");
+        // The maze is the array itself, not an object with a .data property.
+        if (!maze || !Array.isArray(maze) || maze.length === 0) {
+            console.warn("[HorrorCorruptMaze] Invalid maze data received.");
             return;
         }
 
@@ -25,20 +26,21 @@ class HorrorCorruptMaze extends HorrorEffect {
     }
 
     corruptMaze(maze) {
-        const mazeArray = maze.data;
-        const tilesToCorrupt = Math.floor(mazeArray.length * this.corruptionAmount);
+        const height = maze.length;
+        if (height === 0) return;
+        const width = maze[0].length;
+        const totalTiles = width * height;
+        const tilesToCorrupt = Math.floor(totalTiles * this.corruptionAmount);
 
         for (let i = 0; i < tilesToCorrupt; i++) {
-            const randomIndex = Math.floor(Math.random() * mazeArray.length);
+            // Pick a random, non-border tile to corrupt
+            const randomRow = Math.floor(Math.random() * (height - 2)) + 1;
+            const randomCol = Math.floor(Math.random() * (width - 2)) + 1;
 
-            // Flip the tile state (0 to 1, or 1 to 0)
-            // We should avoid changing the start/end points or the border walls.
-            // For now, a simple flip is fine as a first pass.
-            const originalValue = mazeArray[randomIndex];
-            mazeArray[randomIndex] = 1 - originalValue; // Flip 0 to 1 or 1 to 0
-
-            // Optional: A check to prevent blocking the start/end could be added here.
-            // For example, by checking if the index is near the player start or maze goal.
+            // Flip the tile state (0 to 1, or 1 to 0), ensuring the tile exists
+            if (maze[randomRow] && typeof maze[randomRow][randomCol] === 'number') {
+                 maze[randomRow][randomCol] = 1 - maze[randomRow][randomCol];
+            }
         }
 
         console.log(`[HorrorCorruptMaze] Corrupted ${tilesToCorrupt} tiles.`);

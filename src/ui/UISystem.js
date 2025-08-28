@@ -756,7 +756,7 @@ class UISystem {
 
     // Countdown system
     updateCountdown(dt) {
-        this.countdownValue -= 0.02;
+        this.countdownValue -= dt; // Use delta time for frame-rate independence
         return this.countdownValue < -2; // Return true when countdown is complete
     }
 

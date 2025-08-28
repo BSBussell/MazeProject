@@ -130,11 +130,10 @@ class CameraSystem {
     
     getCountdownZoom() {
         // Get time remaining from game
-        if (!window.game) return 1.0;
+        if (!window.game || !window.game.systems.ui) return 1.0;
         
-        // This logic now mirrors the UI timing logic for perfect synchronization.
-        const elapsed = ((new Date() - window.game.startDate) / 1000) * window.game.shuffleTimerSpeed;
-        const timeRemaining = Math.ceil(window.game.Wait - elapsed);
+        // Get the canonical countdown value from the UI system for perfect sync.
+        const timeRemaining = Math.ceil(window.game.systems.ui.countdownValue);
 
         // Apply zoom out effect for last 3 seconds and play sound
         if (timeRemaining <= 3 && timeRemaining > 0) {

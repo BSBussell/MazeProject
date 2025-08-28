@@ -50,28 +50,26 @@ class HorrorAudio extends HorrorEffect {
         // Music state will be handled by the update loop based on horror level
     }
 
-    onMazeReshuffle() {
-        // No longer need to manage music state here; update() handles it.
+    onMazeReshuffle(maze) {
+        // Manage music state change as a discrete event on shuffle
+        if (this.system.horrorLevel > 0.4 && !this.musicIsOff) {
+            this.system.audioSystem.stopBackgroundMusic();
+            this.musicIsOff = true;
+            console.log("[HorrorAudio] Music stopped on shuffle due to high horror.");
+        } else if (this.system.horrorLevel <= 0.4 && this.musicIsOff) {
+            this.system.audioSystem.startBackgroundMusic();
+            this.musicIsOff = false;
+            console.log("[HorrorAudio] Music restarted on shuffle due to low horror.");
+        }
     }
 
     update(intensity, dt) {
         const now = this.system.elapsed;
 
-        // Dynamically manage background music based on horror intensity
-        if (intensity > 0.4 && !this.musicIsOff) {
-            this.system.audioSystem.stopBackgroundMusic();
-            this.musicIsOff = true;
-            console.log("[HorrorAudio] Music stopped due to high intensity.");
-        } else if (intensity <= 0.4 && this.musicIsOff) {
-            this.system.audioSystem.startBackgroundMusic();
-            this.musicIsOff = false;
-            console.log("[HorrorAudio] Music restarted due to low intensity.");
-        }
-
-        // Only play ambient sounds if the music is off
+        // Ambience is independent of shuffle event, depends only on music being off
         if (this.musicIsOff) {
             if (now - this.lastSoundPlayTime > this.soundCooldown) {
-                console.log(`[HorrorAudio] Cooldown finished. Playing scary sound. Intensity: ${intensity.toFixed(2)}`);
+                console.log(`[HorrorAudio] Cooldown finished. Playing ambient sound. Intensity: ${intensity.toFixed(2)}`);
                 this.playRandomScarySound(now, intensity);
             }
         }
