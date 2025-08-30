@@ -332,7 +332,7 @@ class UISystem {
             this.textAnimStartTime = currentTime;
         }
 
-        const titleText = "ShuffleRunner";
+        const titleText = "Disorientation";
         // Position title at maze center (world coordinates, not screen coordinates)
         const mazeSize = window.game ? window.game.currentMazeSize : 25;
         const centerX = (mazeSize / 2) * 25; // World X coordinate
@@ -355,7 +355,7 @@ class UISystem {
         if (currentTime - this.textAnimStartTime > subtitleDelay) {
             const flickerTime =
                 (currentTime - this.textAnimStartTime - subtitleDelay) / 100;
-            const flickerIntensity = Math.random() * 0.4 + 0.6; // Random flicker between 0.7 and 1.0
+            const flickerIntensity = Math.random() * 0.3 + 0.7; // Random flicker between 0.7 and 1.0
             const bloodRed = this._getElementColor(
                 { r: 255, g: 0, b: 0 },
                 flickerIntensity,
@@ -363,7 +363,7 @@ class UISystem {
             );
 
             ctx.save();
-            ctx.font = "28px 'Nova Square', monospace";
+            ctx.font = "bold 28px 'Nova Square', monospace";
             ctx.textAlign = "center";
             ctx.fillStyle = bloodRed;
             ctx.fillText("- FROM BEE'S ARCHIVES -", centerX, centerY + 45);
@@ -401,7 +401,7 @@ class UISystem {
     }
 
     renderCountdown(ctx, currentTime) {
-        ctx.font = "60px 'Nova Square', monospace";
+        ctx.font = "bold 60px 'Nova Square', monospace";
         ctx.textAlign = "center";
         ctx.fillStyle = this._getElementColorFromHex("#FF0000", 1, "timer");
         const centerX = 500;
@@ -450,7 +450,7 @@ class UISystem {
                     1,
                     "combo",
                 );
-                ctx.font = "24px 'Nova Square', monospace";
+                ctx.font = "bold 24px 'Nova Square', monospace";
                 ctx.textAlign = "center";
                 ctx.fillText(`Combo x${comboInfo.count}`, comboX, comboY);
             }
@@ -494,7 +494,7 @@ class UISystem {
         const startY = 200;
 
         // Game Over Title
-        ctx.font = "60px 'Nova Square', monospace";
+        ctx.font = "bold 60px 'Nova Square', monospace";
         ctx.textAlign = "center";
         ctx.fillStyle = this._getElementColorFromHex("#FF0000", 1, "gameover");
         ctx.shadowColor = "transparent";
@@ -526,8 +526,8 @@ class UISystem {
             }
 
             ctx.font = isNewScore
-                ? "32px 'Nova Square', monospace"
-                : "28px 'Nova Square', monospace";
+                ? "bold 32px 'Nova Square', monospace"
+                : "bold 28px 'Nova Square', monospace";
             ctx.fillText(
                 `${i + 1}. ${score.score} Level(${score.mazeSize}x${score.mazeSize})`,
                 centerX,
@@ -538,7 +538,7 @@ class UISystem {
         ctx.shadowBlur = 0;
 
         // Instructions
-        ctx.font = "24px 'Nova Square', monospace";
+        ctx.font = "bold 24px 'Nova Square', monospace";
         ctx.fillStyle = this._getElementColorFromHex("#00FF00", 1, "gameover");
         ctx.fillText("Click to Play Again", centerX, startY + 280);
     }
@@ -553,7 +553,7 @@ class UISystem {
         // Score - bright neon pink
         ctx.shadowColor = "transparent";
         ctx.shadowBlur = 0;
-        ctx.font = "26px 'Nova Square', monospace";
+        ctx.font = "bold 26px 'Nova Square', monospace";
         ctx.fillStyle = this._getElementColorFromHex("#FF0080", 1, "hud");
         ctx.fillText(`Score: ${score}`, x, y);
 
@@ -565,14 +565,14 @@ class UISystem {
         const rgbBase = { r, g, b };
         ctx.shadowColor = "transparent";
         ctx.shadowBlur = 0;
-        ctx.font = "22px 'Nova Square', monospace";
+        ctx.font = "bold 22px 'Nova Square', monospace";
         ctx.fillStyle = this._getElementColor(rgbBase, 1, "hud");
         ctx.fillText(`High Score: ${highScore}`, x, y + 35);
 
         // Level - bright neon cyan
         ctx.shadowColor = "transparent";
         ctx.shadowBlur = 0;
-        ctx.font = "20px 'Nova Square', monospace";
+        ctx.font = "bold 20px 'Nova Square', monospace";
         ctx.fillStyle = this._getElementColorFromHex("#00FFFF", 1, "hud");
         ctx.fillText(`Level: ${mazeSize}x${mazeSize}`, x, y + 65);
 
@@ -622,7 +622,7 @@ class UISystem {
         }
 
         // Timer text
-        ctx.font = "24px 'Nova Square', monospace";
+        ctx.font = "bold 24px 'Nova Square', monospace";
         ctx.textAlign = "center";
         {
             const baseText =
@@ -642,7 +642,7 @@ class UISystem {
         const centerY = 300;
 
         ctx.save();
-        ctx.font = "48px 'Nova Square', monospace";
+        ctx.font = "bold 48px 'Nova Square', monospace";
         ctx.textAlign = "center";
         ctx.fillStyle = this._getElementColorFromHex(
             "#FF0000",
@@ -654,7 +654,7 @@ class UISystem {
         ctx.fillText(`+100 Points!`, centerX, centerY - 50);
         ctx.shadowBlur = 0;
 
-        ctx.font = "36px 'Nova Square', monospace";
+        ctx.font = "bold 36px 'Nova Square', monospace";
         ctx.fillStyle = this._getElementColorFromHex(
             "#00FF00",
             1,
@@ -680,7 +680,7 @@ class UISystem {
         const charDelay = 80;
         const elapsed = currentTime - startTime;
 
-        ctx.font = `${fontSize}px 'Nova Square', monospace`;
+        ctx.font = `bold ${fontSize}px 'Nova Square', monospace`;
         ctx.textAlign = "center";
 
         let visibleChars = Math.floor((elapsed - 300) / charDelay);
@@ -817,7 +817,8 @@ class UISystem {
         if (typeof document !== "undefined") {
             const canvas = document.getElementById("canvas");
             if (canvas) {
-                canvas.style.opacity = "0";
+                // Ensure canvas is visible on intro/retry
+                canvas.style.opacity = "1";
             }
         }
     }

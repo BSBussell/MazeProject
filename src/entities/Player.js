@@ -9,6 +9,7 @@ class Player {
         this.vy = 0;
         this.width = 15;
         this.height = 15;
+        this.hidden = false;
         
         // Path recording for ghost
         this.path = [];
@@ -63,6 +64,7 @@ class Player {
     }
     
     render(ctx) {
+        if (this.hidden) return;
         // Render trail ghosts first (behind player)
         for (const ghost of this.trail) {
             ctx.fillStyle = `rgba(0, 80, 255, ${ghost.alpha.toFixed(3)})`;
@@ -101,6 +103,7 @@ class Player {
         this.trail = [];
         this.trailEmitT = 0;
         this.path = []; // Reset path on new level/restart
+        this.hidden = false;
     }
     
     moveToSafePosition(mazeSystem) {

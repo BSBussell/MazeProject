@@ -2,7 +2,7 @@ class HorrorGhost extends HorrorEffect {
     constructor(system) {
         super(system);
         this.cost = 0.2; // Cost to spawn a ghost
-        this.triggerIntensity = 0.5; // Intensity required to consider spawning a ghost
+        this.triggerIntensity = 0.4; // Minimum intensity to consider spawning (regular ghosts)
     }
 
     onMazeReshuffle(maze) {
@@ -15,34 +15,45 @@ class HorrorGhost extends HorrorEffect {
             if (ghost.isClone) {
                 ghost.destroy();
                 game.activeGhosts.splice(i, 1);
-                console.log("[HorrorGhost] Despawned a cosmic clone on shuffle.");
+                console.log(
+                    "[HorrorGhost] Despawned a cosmic clone on shuffle.",
+                );
             }
         }
 
         // 2. Spawn new ghosts for the CURRENT round.
         const intensity = this.system.getIntensity();
+        // Require >0.4 for any ghost spawning at all
         if (intensity <= this.triggerIntensity) {
             return;
         }
 
-        const baseCost = this.cost;
+        // Scale base cost down as horror multiplier rises
+        const hMul = Math.max(0.1, this.system.horrorBuildupMultiplier || 1);
+        const baseCost = this.cost / hMul;
         let numActiveGhosts = game.activeGhosts.length;
 
         while (true) {
-            const spawnCost = numActiveGhosts > 0 ? baseCost / numActiveGhosts : baseCost;
+            const spawnCost =
+                numActiveGhosts > 0 ? baseCost / numActiveGhosts : baseCost;
 
-            if (this.system.horrorLevel >= spawnCost && Math.random() < 0.4) {
-                console.log(`[HorrorGhost] Spawning ghost (cost: ${spawnCost.toFixed(3)}). Total ghosts: ${numActiveGhosts + 1}`);
+            if (this.system.horrorLevel >= spawnCost && Math.random() < 0.7) {
+                console.log(
+                    `[HorrorGhost] Spawning ghost (cost: ${spawnCost.toFixed(3)} | hMul: ${hMul.toFixed(2)}). Total ghosts: ${numActiveGhosts + 1}`,
+                );
                 this.system.horrorLevel -= spawnCost;
 
                 const spawnPoint = this.findSafeSpawnPoint(game, maze);
                 if (!spawnPoint) {
-                    console.warn("[HorrorGhost] Could not find a safe spawn point.");
+                    console.warn(
+                        "[HorrorGhost] Could not find a safe spawn point.",
+                    );
                     continue; // Try again next time if no spot found
                 }
 
                 let ghost;
-                if (Math.random() < 0.2 && game.playerPaths.length > 0) {
+                const canSpawnClone = intensity > 0.6;
+                if (canSpawnClone && Math.random() < 0.3 && game.playerPaths.length > 0) {
                     console.log("[HorrorGhost] Spawning a COSMIC CLONE!");
                     ghost = new Ghost(null, true, spawnPoint);
                 } else {
@@ -67,10 +78,13 @@ class HorrorGhost extends HorrorEffect {
 
         // Search in an expanding radius around the player
         for (let radius = 3; radius < 10; radius++) {
-            for (let i = 0; i < 10; i++) { // Try 10 random positions at this radius
+            for (let i = 0; i < 10; i++) {
+                // Try 10 random positions at this radius
                 const angle = Math.random() * 2 * Math.PI;
-                const checkX = playerTileX + Math.round(radius * Math.cos(angle));
-                const checkY = playerTileY + Math.round(radius * Math.sin(angle));
+                const checkX =
+                    playerTileX + Math.round(radius * Math.cos(angle));
+                const checkY =
+                    playerTileY + Math.round(radius * Math.sin(angle));
 
                 if (!mazeSystem.isSolid(checkY, checkX)) {
                     return { x: checkX * 25 + 7.5, y: checkY * 25 + 7.5 };

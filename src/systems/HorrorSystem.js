@@ -3,7 +3,7 @@
  * Horror increases with each map reshuffle and level completion
  */
 class HorrorSystem {
-    constructor({ targetTime = 240, cooldown = 45, rng = Math.random } = {}) {
+    constructor({ targetTime = 250, cooldown = 45, rng = Math.random } = {}) {
         this.targetTime = targetTime;
         this.cooldown = cooldown;
         this.rng = rng;
@@ -19,6 +19,10 @@ class HorrorSystem {
 
         // An array of horror effect instances
         this.effects = [];
+
+        // New global multiplier for horror buildup
+        this.horrorBuildupMultiplier = 1;
+        
     }
 
     addEffect(effect) {
@@ -67,7 +71,10 @@ class HorrorSystem {
 
     // Call when map reshuffles (+0.04 horror, halved from 0.08)
     onMapReshuffle(maze) {
-        this.horrorLevel = Math.min(1.0, this.horrorLevel + 0.04);
+        this.horrorLevel = Math.min(
+            1.0,
+            this.horrorLevel + 0.04 * this.horrorBuildupMultiplier,
+        );
         this.totalMapEvents++;
         this.checkForRelief();
 
@@ -88,7 +95,10 @@ class HorrorSystem {
 
     // Call when level completed (+0.08 horror, halved from 0.16)
     onLevelComplete(level) {
-        this.horrorLevel = Math.min(1.0, this.horrorLevel + 0.08);
+        this.horrorLevel = Math.min(
+            1.0,
+            this.horrorLevel + 0.08 * this.horrorBuildupMultiplier,
+        );
         this.totalMapEvents++;
         this.checkForRelief();
 
@@ -115,11 +125,18 @@ class HorrorSystem {
 
         // Punish Greed
         if (pellet.type === "point") {
-            this.horrorLevel = Math.max(0, this.horrorLevel + 0.125);
+            this.horrorLevel = Math.max(
+                0,
+                this.horrorLevel + 0.0125 * this.horrorBuildupMultiplier,
+            );
 
             // Reward self preservation
         } else {
-            this.horrorLevel = Math.max(0, this.horrorLevel - 0.025);
+            // I cheat by making the multiplier matter less here. Because I HATE FUN
+            this.horrorLevel = Math.max(
+                0,
+                this.horrorLevel - 0.005 * (this.horrorBuildupMultiplier * 0.5),
+            );
         }
 
         // This is how scream says horror movies should work
@@ -184,15 +201,31 @@ class HorrorSystem {
                 console.warn("[HorrorSystem] effect update failed", e);
             }
         });
+
     }
 
     getIntensity() {
         const t = Math.min(1, Math.max(0, this.elapsed / this.targetTime));
         const timeBasedIntensity = t * t * t; // cubic ease-in
 
+        // The more intensity builds, the more reactionary the game becomes
+        this.setHorrorBuildupMultiplier(1 + timeBasedIntensity);
+
         // Combine time-based intensity with horror level from map events
         // This ensures intensity is always at least horrorLevel
-        return Math.max(this.horrorLevel, timeBasedIntensity);
+        return timeBasedIntensity;
+    }
+
+    // New method to set the horror buildup multiplier
+    setHorrorBuildupMultiplier(multiplier) {
+        if (typeof multiplier === "number" && isFinite(multiplier)) {
+            this.horrorBuildupMultiplier = Math.max(0, multiplier); // Ensure non-negative
+            // console.log(
+                // `[HorrorSystem] Horror buildup multiplier set to: ${this.horrorBuildupMultiplier}`,
+            // );
+        } else {
+            console.warn("[HorrorSystem] Invalid multiplier value provided.");
+        }
     }
 
     // Get total horror influence (for UI display, etc.)

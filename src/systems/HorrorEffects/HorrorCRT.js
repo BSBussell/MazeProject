@@ -27,6 +27,12 @@ class HorrorCRT extends HorrorEffect {
             if (!this.originalConfig) return; // Abort if filter is still not ready
         }
 
+        // If a timed glitch override is active, avoid fighting those settings
+        const now = (typeof performance !== 'undefined' ? performance.now() : Date.now());
+        if (window._crtGlitchOverrideUntil && now < window._crtGlitchOverrideUntil) {
+            return;
+        }
+
         const config = window.crtFilter.config;
         // Smoothly adjust CRT parameters based on horror intensity
         // Values chosen to create a noticeable but not overwhelming effect at max intensity

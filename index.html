@@ -11,6 +11,7 @@
                 margin: 0;
                 padding: 0;
                 font-family: "Nova Square", monospace;
+                font-weight: 700;
                 background: black;
                 width: 100%;
                 height: 100%;
@@ -146,6 +147,37 @@
                 crtFilter.config.flicker = 0.08;
                 crtFilter.config.signalLoss = 0.1;
                 crtFilter.config.verticalJitter = 0.008;
+                window._crtGlitchOverrideUntil = performance.now() + duration;
+
+                setTimeout(() => {
+                    if (crtFilter && crtEnabled) {
+                        Object.assign(crtFilter.config, original);
+                    }
+                }, duration);
+            };
+
+            // Heavier glitch burst for intense moments (e.g., being grabbed)
+            window.crtHeavyGlitch = function (duration = 1800) {
+                if (!crtFilter || !crtEnabled) return;
+
+                const original = { ...crtFilter.config };
+
+                // Push many parameters much harder for a short, chaotic glitch
+                Object.assign(crtFilter.config, {
+                    staticNoise: 0.12,
+                    flicker: 0.18,
+                    signalLoss: 0.22,
+                    verticalJitter: 0.02,
+                    horizontalTearing: 0.01,
+                    barrelDistortion: 0.18,
+                    curvature: 0.01,
+                    chromaticAberration: 0.01,
+                    scanlineIntensity: 0.35,
+                    brightness: 0.8,
+                    contrast: 1.25,
+                    desaturation: 0.18,
+                });
+                window._crtGlitchOverrideUntil = performance.now() + duration;
 
                 setTimeout(() => {
                     if (crtFilter && crtEnabled) {

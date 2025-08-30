@@ -10,7 +10,7 @@ class GameCore {
         this.isRunning = false;
 
         // Game state
-        this.gameState = "intro"; // intro, countdown, playing, gameover, cinematic
+        this.gameState = "intro"; // intro, countdown, playing, winning, gameover, cinematic
         this.gameScore = 0;
         this.mazeLevel = 1;
         this.baseMazeSize = 25;
@@ -42,6 +42,14 @@ class GameCore {
         // Ghost-related properties
         this.playerPaths = []; // Array to store historical player paths
         this.activeGhosts = []; // Array to manage active ghost entities
+
+        // Win dissolve state
+        this.winDissolve = {
+            active: false,
+            startTime: 0,
+            duration: 650, // ms
+            pos: { x: 0, y: 0 },
+        };
 
         // Event hooks for easy extension
         this.hooks = {
@@ -203,6 +211,9 @@ class GameCore {
             case "playing":
                 this.updatePlaying(dt, currentTime);
                 break;
+            case "winning":
+                this.updateWinning(dt, currentTime);
+                break;
             case "gameover":
                 this.updateGameOver(dt, currentTime);
                 break;
@@ -235,9 +246,10 @@ class GameCore {
         // Handle cinematic camera movement
         const isComplete = this.systems.camera.updateCinematic(dt, currentTime);
         if (isComplete) {
-            // Ensure player is at start position when cinematic completes
-            this.entities.player.reset(25, 25);
-            this.systems.physics.setPose(25, 25);
+            // Ensure player is at center of the green tile when cinematic completes
+            const { x, y } = this.getStartTopLeft();
+            this.entities.player.reset(x, y);
+            this.systems.physics.setPose(x, y);
             this.gameState = "countdown";
         }
     }
@@ -246,6 +258,10 @@ class GameCore {
         // Handle countdown before gameplay
         if (this.systems.ui.updateCountdown(dt * this.countdownSpeed)) {
             this.gameState = "playing";
+            // Prevent background music from starting mid-run if it was deferred
+            if (this.systems && this.systems.audio && typeof this.systems.audio.cancelPendingMusicStart === "function") {
+                this.systems.audio.cancelPendingMusicStart();
+            }
             this.shuffleTimeRemaining = this.currentShuffleTime;
         }
     }
@@ -267,6 +283,12 @@ class GameCore {
             dt,
             this.shuffleTimeRemaining,
         );
+
+        // If player has reached the goal, start dissolve animation into the red tile
+        if (this.checkWinCondition()) {
+            this.startWinDissolve();
+            return;
+        }
 
         // Update any active ghosts and check for collisions
         for (let i = this.activeGhosts.length - 1; i >= 0; i--) {
@@ -292,10 +314,7 @@ class GameCore {
         // including triggering the onPelletCollected hook.
         this.systems.pellets.checkCollisions(this.entities.player);
 
-        // Check win condition
-        if (this.checkWinCondition()) {
-            this.completeLevel();
-        }
+        // Win condition now handled before ghost checks above
 
         // Check shuffle timer (which now also handles game over)
         this.checkShuffleTimer();
@@ -324,7 +343,7 @@ class GameCore {
         // Render pellets
         this.systems.pellets.render(this.ctx, currentTime);
 
-        // Render player
+        // Render player (skip if hidden during dissolve)
         this.entities.player.render(this.ctx);
 
         // Render any active ghosts
@@ -373,6 +392,12 @@ class GameCore {
         this.transitioningToNext = true;
         this.showingScore = true;
 
+        // Despawn all ghosts immediately on level completion and stop any audio
+        for (let i = this.activeGhosts.length - 1; i >= 0; i--) {
+            try { this.activeGhosts[i].destroy(); } catch (_) {}
+        }
+        this.activeGhosts.length = 0;
+
         this.triggerHook("onLevelComplete", this.mazeLevel, this.gameScore);
 
         // Calculate next level parameters
@@ -406,9 +431,10 @@ class GameCore {
         this.systems.camera.startCinematic();
         this.generateNewMaze();
 
-        // Reset player to start position for new level
-        this.entities.player.reset(25, 25);
-        this.systems.physics.setPose(25, 25);
+        // Reset player to center of green start tile for new level
+        const { x, y } = this.getStartTopLeft();
+        this.entities.player.reset(x, y);
+        this.systems.physics.setPose(x, y);
     }
 
     gameOver() {
@@ -444,8 +470,9 @@ class GameCore {
         this.systems.pellets.reset();
         this.systems.ui.reset();
         this.generateNewMaze();
-        this.entities.player.reset(25, 25);
-        this.systems.physics.setPose(25, 25);
+        const { x, y } = this.getStartTopLeft();
+        this.entities.player.reset(x, y);
+        this.systems.physics.setPose(x, y);
 
         // Recenter camera at maze center for intro
         this.systems.camera.positionAtMazeCenter(this.currentMazeSize);
@@ -496,6 +523,13 @@ class GameCore {
         this.Wait -= this.SHUFFLE_TIME_DECREASE;
         this.shuffleTimeRemaining = this.Wait;
 
+        // Despawn all ghosts on reshuffle to prevent carry-over
+        for (let i = this.activeGhosts.length - 1; i >= 0; i--) {
+            const g = this.activeGhosts[i];
+            try { g.destroy(); } catch (_) {}
+            this.activeGhosts.splice(i, 1);
+        }
+
         // Store the last path for the ghost and reset the player's current path
         if (this.entities.player && this.entities.player.path.length > 0) {
             this.playerPaths.push([...this.entities.player.path]);
@@ -539,19 +573,41 @@ class GameCore {
         // 2. Shake the screen
         this.systems.camera.addCameraKick(2.5);
 
+        // 2b. Heavy CRT glitch burst to sell the grab
+        if (typeof window.crtHeavyGlitch === "function") {
+            window.crtHeavyGlitch(2000);
+        } else if (typeof window.crtBurst === "function") {
+            // Fallback to lighter burst if heavy not available
+            window.crtBurst(1500);
+        }
+
         // 3. Play collision sound
         // this.systems.audio.sfxBuzz();
 
-        // 4. Clean up the ghost's resources (e.g., audio)
-        ghost.destroy();
-        const index = this.activeGhosts.indexOf(ghost);
-        if (index > -1) {
-            this.activeGhosts.splice(index, 1);
+        // 4. Despawn collided ghost, and if it was a cosmic clone, despawn ALL clones
+        const wasClone = !!ghost.isClone;
+
+        if (wasClone) {
+            for (let i = this.activeGhosts.length - 1; i >= 0; i--) {
+                const g = this.activeGhosts[i];
+                if (g && g.isClone) {
+                    try { g.destroy(); } catch (_) {}
+                    this.activeGhosts.splice(i, 1);
+                }
+            }
+        } else {
+            // Just remove this single ghost
+            try { ghost.destroy(); } catch (_) {}
+            const index = this.activeGhosts.indexOf(ghost);
+            if (index > -1) {
+                this.activeGhosts.splice(index, 1);
+            }
         }
 
-        // 5. Teleport player back to the start of the level
-        this.entities.player.reset(25, 25);
-        this.systems.physics.setPose(25, 25);
+        // 5. Teleport player back to the start of the level (centered in green)
+        const { x, y } = this.getStartTopLeft();
+        this.entities.player.reset(x, y);
+        this.systems.physics.setPose(x, y);
     }
 
     getUIData() {
@@ -563,6 +619,43 @@ class GameCore {
             maxTime: this.Wait, // Use Wait as it represents the current round's duration
             showingScore: this.showingScore,
         };
+    }
+
+    // Compute the top-left position so the player is centered in the green start tile
+    getStartTopLeft() {
+        const tileSize = 25;
+        const px = tileSize + Math.floor((tileSize - this.entities.player.width) / 2);
+        const py = tileSize + Math.floor((tileSize - this.entities.player.height) / 2);
+        return { x: px, y: py };
+    }
+
+    // Begin the dissolve effect when reaching the red tile
+    startWinDissolve() {
+        if (this.winDissolve.active) return;
+        this.winDissolve.active = true;
+        this.winDissolve.startTime = performance.now();
+        const c = this.entities.player.getCenter();
+        this.winDissolve.pos = { x: c.x, y: c.y };
+        this.entities.player.hidden = true;
+        this.gameState = "winning";
+    }
+
+    // Update dissolve; on completion, advance to next level
+    updateWinning(dt, currentTime) {
+        // Emit red particles to simulate dissolving
+        // Spawn more at the beginning and taper off
+        const elapsed = performance.now() - this.winDissolve.startTime;
+        const t = Math.min(elapsed / this.winDissolve.duration, 1);
+        const bursts = Math.max(2, Math.floor(10 * (1 - t)));
+        for (let i = 0; i < bursts; i++) {
+            this.systems.effects.addParticles(this.winDissolve.pos.x, this.winDissolve.pos.y, "#FF0000", 4);
+        }
+
+        if (elapsed >= this.winDissolve.duration) {
+            // Finish and move to next level
+            this.winDissolve.active = false;
+            this.completeLevel();
+        }
     }
 
     start() {

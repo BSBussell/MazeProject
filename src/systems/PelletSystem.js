@@ -7,9 +7,14 @@ class PelletSystem {
         this.pellets = [];
         this.animTime = 0;
 
-        // Speed boost tracking
-        this.speedBoostActive = false;
-        this.speedBoostEndTime = 0;
+        // Speed boost tracking (stackable with diminishing returns)
+        this.speedBoosts = []; // array of expiry timestamps (ms)
+        this.speedBoostActive = false; // derived from boosts length
+        this.baseMaxSpeed = 300; // baseline when no boosts are active
+        this.speedIncFirst = 120; // first boost adds this much speed
+        this.speedDecay = 0.6; // each additional boost adds inc * decay^i
+        this.speedDurationMs = 10000; // duration per boost
+        this._lastAppliedSpeed = null;
 
         // Combo system
         this.comboCount = 0;
@@ -28,36 +33,44 @@ class PelletSystem {
         let timePelletCount = 0;
         let speedPelletCount = 0;
 
+        // Track occupied dead-end tiles to prevent multiple pellets on the same tile
+        const occupied = new Set();
+        const key = (x, y) => `${x},${y}`;
+
         for (let y = 1; y < maze.length - 1; y++) {
             for (let x = 1; x < maze[0].length - 1; x++) {
                 if (this.isDeadEnd(maze, x, y)) {
+                    // Skip the player starting tile (1,1)
+                    if (x === 1 && y === 1) continue;
+
                     deadEndCount++;
+                    const k = key(x, y);
+                    if (occupied.has(k)) continue; // already has a pellet
 
-                    // Independent check for point pellets
-                    if (level >= 2 && Math.random() < 0.15) {
+                    // Try to spawn at most one pellet per dead end, with priorities
+                    const placePellet = (type) => {
                         this.pellets.push({
-                            x: x * 25 + 12.5, y: y * 25 + 12.5,
-                            collected: false, type: 'point'
+                            x: x * 25 + 12.5,
+                            y: y * 25 + 12.5,
+                            collected: false,
+                            type,
                         });
-                        pointPelletCount++;
+                        occupied.add(k);
+                        return true;
+                    };
+
+                    // Prefer rarer pellets slightly by checking in order: speed -> time -> point
+                    if (level >= 7 && Math.random() < 0.03 && !occupied.has(k)) {
+                        if (placePellet('speed')) speedPelletCount++;
+                        continue;
                     }
-
-                    // Independent check for time pellets
-                    if (level >= 3 && Math.random() < 0.20) {
-                        this.pellets.push({
-                            x: x * 25 + 12.5, y: y * 25 + 12.5,
-                            collected: false, type: 'time'
-                        });
-                        timePelletCount++;
+                    if (level >= 3 && Math.random() < 0.20 && !occupied.has(k)) {
+                        if (placePellet('time')) timePelletCount++;
+                        continue;
                     }
-
-                    // Independent check for speed pellets
-                    if (level >= 7 && Math.random() < 0.03) {
-                        this.pellets.push({
-                            x: x * 25 + 12.5, y: y * 25 + 12.5,
-                            collected: false, type: 'speed'
-                        });
-                        speedPelletCount++;
+                    if (level >= 2 && Math.random() < 0.15 && !occupied.has(k)) {
+                        if (placePellet('point')) pointPelletCount++;
+                        continue;
                     }
                 }
             }
@@ -142,13 +155,19 @@ class PelletSystem {
                 break;
 
             case 'speed':
-                // Original speed pellet logic
-                this.speedBoostActive = true;
-                this.speedBoostEndTime = Date.now() + 10000;
+                // Stackable speed boost with diminishing returns
                 if (window.game && window.game.systems.physics) {
-                    window.game.systems.physics.configure({ MAX_SPEED: 450 });
+                    // Capture current base when starting a new stack
+                    if (this.speedBoosts.length === 0) {
+                        try {
+                            this.baseMaxSpeed = window.game.systems.physics.getConfig().MAX_SPEED || this.baseMaxSpeed;
+                        } catch (e) { /* ignore */ }
+                    }
                 }
-                this.triggerPelletEffects(playerX, playerY, "+Speed", "#0099ff", 12);
+                this.speedBoosts.push(Date.now() + this.speedDurationMs);
+                this.speedBoostActive = this.speedBoosts.length > 0;
+                this.applyCurrentSpeed();
+                this.triggerPelletEffects(playerX, playerY, `+Speed x${this.speedBoosts.length}` , "#0099ff", 12);
                 break;
         }
     }
@@ -166,10 +185,30 @@ class PelletSystem {
     update(dt) {
         this.animTime += dt;
 
-        if (this.speedBoostActive && Date.now() > this.speedBoostEndTime) {
-            this.speedBoostActive = false;
+        // Expire speed boosts and update speed accordingly
+        if (this.speedBoosts.length > 0) {
+            const now = Date.now();
+            const before = this.speedBoosts.length;
+            this.speedBoosts = this.speedBoosts.filter(ts => ts > now);
+            if (this.speedBoosts.length !== before) {
+                if (this.speedBoosts.length === 0) {
+                    // Stack ended: restore base speed
+                    this.speedBoostActive = false;
+                    if (window.game && window.game.systems.physics) {
+                        window.game.systems.physics.configure({ MAX_SPEED: this.baseMaxSpeed });
+                        this._lastAppliedSpeed = this.baseMaxSpeed;
+                    }
+                } else {
+                    this.speedBoostActive = true;
+                    this.applyCurrentSpeed();
+                }
+            }
+        } else {
+            // Keep base in sync with any external adjustments when idle
             if (window.game && window.game.systems.physics) {
-                window.game.systems.physics.configure({ MAX_SPEED: 300 });
+                try {
+                    this.baseMaxSpeed = window.game.systems.physics.getConfig().MAX_SPEED;
+                } catch (e) { /* ignore */ }
             }
         }
 
@@ -214,15 +253,22 @@ class PelletSystem {
 
     reset() {
         this.pellets = [];
+        this.speedBoosts = [];
         this.speedBoostActive = false;
-        this.speedBoostEndTime = 0;
         this.comboCount = 0;
         this.comboMul = 1.0;
         this.comboWindowUntil = 0;
 
         // Also ensure the player's speed is reset in the physics system
         if (window.game && window.game.systems.physics) {
-            window.game.systems.physics.configure({ MAX_SPEED: 300 });
+            // Reset base to current physics speed and clear any applied boost
+            try {
+                this.baseMaxSpeed = window.game.systems.physics.getConfig().MAX_SPEED || 300;
+            } catch (e) {
+                this.baseMaxSpeed = 300;
+            }
+            window.game.systems.physics.configure({ MAX_SPEED: this.baseMaxSpeed });
+            this._lastAppliedSpeed = this.baseMaxSpeed;
         }
     }
 
@@ -232,6 +278,24 @@ class PelletSystem {
 
     isSpeedBoosted() {
         return this.speedBoostActive;
+    }
+
+    // Compute boosted speed based on active stack
+    _computeBoostedSpeed(stackCount) {
+        let bonus = 0;
+        for (let i = 0; i < stackCount; i++) {
+            bonus += this.speedIncFirst * Math.pow(this.speedDecay, i);
+        }
+        return this.baseMaxSpeed + bonus;
+    }
+
+    applyCurrentSpeed() {
+        if (!(window.game && window.game.systems.physics)) return;
+        const target = this._computeBoostedSpeed(this.speedBoosts.length);
+        if (this._lastAppliedSpeed === null || Math.abs(target - this._lastAppliedSpeed) > 0.001) {
+            window.game.systems.physics.configure({ MAX_SPEED: target });
+            this._lastAppliedSpeed = target;
+        }
     }
 }
 

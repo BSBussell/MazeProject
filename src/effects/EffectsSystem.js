@@ -135,7 +135,7 @@ class EffectsSystem {
             
             ctx.save();
             ctx.globalAlpha = alpha;
-            ctx.font = (popup.kind === "combo" ? "36px" : "32px") + " 'Nova Square', monospace"; // Increased from 20px/18px to 36px/32px
+            ctx.font = "bold " + (popup.kind === "combo" ? "36px" : "32px") + " 'Nova Square', monospace"; // Increased from 20px/18px to 36px/32px
             ctx.fillStyle = this.hueColor(hue, 90, 60, 1);
             ctx.shadowColor = 'transparent';
             ctx.shadowBlur = 0;

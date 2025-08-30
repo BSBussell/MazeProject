@@ -75,17 +75,8 @@ class GameInit {
         // Attempt to start audio after user interaction
         if (!this.audioStartAttempted && this.game && this.game.systems.audio) {
             this.audioStartAttempted = true;
-            
-            // If game is in playing state, try to start background music
-            if (this.game.gameState === 'playing' || this.game.gameState === 'countdown') {
-                try {
-                    this.game.systems.audio.startBackgroundMusic();
-                    console.log('[Audio] Background music started after user interaction');
-                } catch (error) {
-                    console.log('[Audio] Failed to start background music:', error);
-                }
-            }
-            
+            // Do not auto-start background music mid-run.
+            // Background music is only started at game start (and will defer if blocked).
             // Also ensure audio context is resumed if needed
             if (this.game.systems.audio.audioContext && this.game.systems.audio.audioContext.state === 'suspended') {
                 this.game.systems.audio.audioContext.resume().then(() => {
@@ -418,7 +409,7 @@ class GameInit {
             ctx.fillRect(10, 10, 300, 200);
             
             ctx.fillStyle = '#00ff00';
-            ctx.font = '12px monospace';
+            ctx.font = 'bold 12px monospace';
             
             yOffset = 30;
             ctx.fillText('=== DEBUG INFO ===', 20, yOffset);
@@ -455,7 +446,7 @@ class GameInit {
                 const alpha = Math.max(0, 1 - (age / msg.duration));
                 
                 ctx.fillStyle = `rgba(255, 255, 0, ${alpha})`;
-                ctx.font = '14px monospace';
+                ctx.font = 'bold 14px monospace';
                 ctx.fillText(`[DEV] ${msg.text}`, 20, msgY + (index * 20));
             });
         }
