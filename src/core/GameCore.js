@@ -43,12 +43,19 @@ class GameCore {
         this.playerPaths = []; // Array to store historical player paths
         this.activeGhosts = []; // Array to manage active ghost entities
 
-        // Win dissolve state
-        this.winDissolve = {
+        // Light finish scale effect state
+        this.winScale = {
             active: false,
             startTime: 0,
-            duration: 650, // ms
+            duration: 400, // ms
             pos: { x: 0, y: 0 },
+        };
+
+        // Level start scale-in effect
+        this.spawnScale = {
+            active: false,
+            startTime: 0,
+            duration: 400, // ms
         };
 
         // Event hooks for easy extension
@@ -250,6 +257,9 @@ class GameCore {
             const { x, y } = this.getStartTopLeft();
             this.entities.player.reset(x, y);
             this.systems.physics.setPose(x, y);
+            // Begin scale-in at the start tile
+            this.spawnScale.active = true;
+            this.spawnScale.startTime = performance.now();
             this.gameState = "countdown";
         }
     }
@@ -284,9 +294,9 @@ class GameCore {
             this.shuffleTimeRemaining,
         );
 
-        // If player has reached the goal, start dissolve animation into the red tile
+        // If player has reached the goal, trigger light scale-to-zero and then complete
         if (this.checkWinCondition()) {
-            this.startWinDissolve();
+            this.startWinScale();
             return;
         }
 
@@ -343,8 +353,87 @@ class GameCore {
         // Render pellets
         this.systems.pellets.render(this.ctx, currentTime);
 
-        // Render player (skip if hidden during dissolve)
-        this.entities.player.render(this.ctx);
+        // Render player (special cases: finish shrink, spawn grow). Otherwise hidden during cinematic/intro/celebration.
+        if (this.gameState === "winning" && this.winScale.active) {
+            const elapsed = performance.now() - this.winScale.startTime;
+            const t = Math.min(elapsed / this.winScale.duration, 1.0);
+            // Ease-out cubic
+            const ease = 1 - Math.pow(1 - t, 3);
+            const s = Math.max(0, 1 - ease);
+
+            const player = this.entities.player;
+            const cx = player.x + player.width / 2;
+            const cy = player.y + player.height / 2;
+
+            this.ctx.save();
+            this.ctx.translate(cx, cy);
+            this.ctx.scale(s, s);
+            this.ctx.translate(-cx, -cy);
+
+            // Draw player rect in same color logic as Player.render()
+            const pelletSystem = this.systems.pellets;
+            // Match Player.render() tinting based on speed stacks
+            if (pelletSystem && typeof pelletSystem.getSpeedInfo === "function") {
+                const info = pelletSystem.getSpeedInfo();
+                const count = info?.count || 0;
+                const t = 1 - Math.pow(0.8, Math.max(0, count));
+                const r = Math.round(0 * (1 - t) + 153 * t);
+                const g = Math.round(0 * (1 - t) + 204 * t);
+                const b = 255;
+                this.ctx.fillStyle = `rgb(${r},${g},${b})`;
+            } else {
+                this.ctx.fillStyle = "#0000FF";
+            }
+            this.ctx.fillRect(player.x, player.y, player.width, player.height);
+
+            this.ctx.restore();
+        } else if (
+            // Hide during cinematic, intro, or score celebration
+            this.gameState !== "cinematic" &&
+            this.gameState !== "intro" &&
+            !this.showingScore
+        ) {
+            // If spawning, draw scaled-up player
+            if (this.spawnScale.active) {
+                const elapsed = performance.now() - this.spawnScale.startTime;
+                const t = Math.min(elapsed / this.spawnScale.duration, 1.0);
+                const ease = 1 - Math.pow(1 - t, 3); // ease-out cubic 0->1
+                const s = Math.max(0, Math.min(1, ease));
+
+                const player = this.entities.player;
+                const cx = player.x + player.width / 2;
+                const cy = player.y + player.height / 2;
+
+                this.ctx.save();
+                this.ctx.translate(cx, cy);
+                this.ctx.scale(s, s);
+                this.ctx.translate(-cx, -cy);
+
+                const pelletSystem = this.systems.pellets;
+                if (pelletSystem && typeof pelletSystem.getSpeedInfo === "function") {
+                    const info = pelletSystem.getSpeedInfo();
+                    const count = info?.count || 0;
+                    const t = 1 - Math.pow(0.8, Math.max(0, count));
+                    const r = Math.round(0 * (1 - t) + 153 * t);
+                    const g = Math.round(0 * (1 - t) + 204 * t);
+                    const b = 255;
+                    this.ctx.fillStyle = `rgb(${r},${g},${b})`;
+                } else {
+                    this.ctx.fillStyle = "#0000FF";
+                }
+                this.ctx.fillRect(player.x, player.y, player.width, player.height);
+
+                this.ctx.restore();
+
+                if (t >= 1) {
+                    this.spawnScale.active = false;
+                }
+            } else {
+                this.entities.player.render(this.ctx);
+            }
+        } else {
+            // Hidden during cinematic/intro/celebration
+        }
 
         // Render any active ghosts
         this.activeGhosts.forEach((ghost) => ghost.render(this.ctx));
@@ -423,6 +512,9 @@ class GameCore {
         this.showingScore = false;
         this.pelletsSpawned = false;
         this.gameState = "cinematic";
+        // Reset any scaling states
+        this.winScale.active = false;
+        this.spawnScale.active = false;
 
         // Reset the main shuffle timer duration for the new level
         this.Wait = this.currentShuffleTime;
@@ -465,6 +557,8 @@ class GameCore {
         this.showingScore = false;
         this.pelletsSpawned = false;
         this.gameState = "intro";
+        this.winScale.active = false;
+        this.spawnScale.active = false;
 
         this.systems.effects.reset();
         this.systems.pellets.reset();
@@ -608,6 +702,21 @@ class GameCore {
         const { x, y } = this.getStartTopLeft();
         this.entities.player.reset(x, y);
         this.systems.physics.setPose(x, y);
+
+        // 6. Spawn extra time pellets to give a comeback window (scale with maze size)
+        try {
+            // Fewer pellets: roughly a quarter of maze dimension, minimum 3
+            const extraCount = Math.max(3, Math.round(this.currentMazeSize * 0.25));
+            const spawned = this.systems.pellets?.spawnExtraTimePellets?.(extraCount) || 0;
+            if (spawned > 0) {
+                this.systems.effects.addPopup(
+                    `+${spawned} time`,
+                    playerPos.x,
+                    playerPos.y - 20,
+                    "score",
+                );
+            }
+        } catch (_) {}
     }
 
     getUIData() {
@@ -629,31 +738,28 @@ class GameCore {
         return { x: px, y: py };
     }
 
-    // Begin the dissolve effect when reaching the red tile
-    startWinDissolve() {
-        if (this.winDissolve.active) return;
-        this.winDissolve.active = true;
-        this.winDissolve.startTime = performance.now();
+    // Start the light win scale effect
+    startWinScale() {
+        if (this.winScale.active) return;
+        this.winScale.active = true;
+        this.winScale.startTime = performance.now();
         const c = this.entities.player.getCenter();
-        this.winDissolve.pos = { x: c.x, y: c.y };
-        this.entities.player.hidden = true;
+        this.winScale.pos = { x: c.x, y: c.y };
         this.gameState = "winning";
     }
 
-    // Update dissolve; on completion, advance to next level
+    // Update the light win scale effect and finish level
     updateWinning(dt, currentTime) {
-        // Emit red particles to simulate dissolving
-        // Spawn more at the beginning and taper off
-        const elapsed = performance.now() - this.winDissolve.startTime;
-        const t = Math.min(elapsed / this.winDissolve.duration, 1);
-        const bursts = Math.max(2, Math.floor(10 * (1 - t)));
-        for (let i = 0; i < bursts; i++) {
-            this.systems.effects.addParticles(this.winDissolve.pos.x, this.winDissolve.pos.y, "#FF0000", 4);
+        if (!this.winScale.active) {
+            // Safety: if we're in winning but not active, bounce back to playing
+            this.gameState = "playing";
+            return;
         }
-
-        if (elapsed >= this.winDissolve.duration) {
-            // Finish and move to next level
-            this.winDissolve.active = false;
+        const elapsed = performance.now() - this.winScale.startTime;
+        if (elapsed >= this.winScale.duration) {
+            this.winScale.active = false;
+            // Switch state first so we don't re-enter winning next frame
+            this.gameState = "playing";
             this.completeLevel();
         }
     }

@@ -104,27 +104,36 @@ class Ghost {
                 const dy = targetPos.y - this.y;
                 const distance = Math.sqrt(dx * dx + dy * dy);
 
-                // Dynamic speed scaling: scarier as horror rises and when close
-                let speed = 1.25; // stronger base boost for clones
+                // Scale with player's current max speed so clones remain threatening
+                const physics = window.game?.systems?.physics;
+                const playerMax = physics?.getConfig ? physics.getConfig().MAX_SPEED : 300; // px/s
                 const horror = window.game?.systems?.horror;
-                const intensity = horror?.getIntensity ? horror.getIntensity() : 0;
-                speed += 0.9 * intensity; // up to +0.9 with max intensity
+                const intensity = horror?.getIntensity ? horror.getIntensity() : 0; // 0..1
 
-                // Proximity boost when within ~150px
-                const playerPos = player ? { x: player.x, y: player.y } : null;
-                if (playerPos) {
-                    const pdx = playerPos.x - this.x;
-                    const pdy = playerPos.y - this.y;
+                // Base factor slightly above player, rising with horror
+                const baseFactor = 1.05 + 0.25 * intensity; // 1.05..1.30x
+
+                // Proximity boost when within ~170px
+                let prox = 0;
+                if (player) {
+                    const pdx = player.x - this.x;
+                    const pdy = player.y - this.y;
                     const pd = Math.sqrt(pdx * pdx + pdy * pdy);
-                    const prox = Math.max(0, Math.min(1, 1 - pd / 170));
-                    speed += 1.0 * prox; // up to +1.0 when very close
+                    prox = Math.max(0, Math.min(1, 1 - pd / 170));
                 }
-                // Clamp to keep fair
-                speed = Math.min(speed, 2.8);
+                const proxFactor = 0.25 * prox; // up to +0.25x near
 
-                if (distance > speed) {
-                    this.x += (dx / distance) * speed;
-                    this.y += (dy / distance) * speed;
+                // Compute per-second speed and clamp relative to player's current max
+                const capFactor = 1.35; // never exceed 135% of player
+                let speedPerSec = playerMax * (baseFactor + proxFactor);
+                speedPerSec = Math.min(speedPerSec, playerMax * capFactor);
+
+                // Convert to per-frame step using dt
+                const step = speedPerSec * dt;
+
+                if (distance > step) {
+                    this.x += (dx / distance) * step;
+                    this.y += (dy / distance) * step;
                 } else {
                     this.x = targetPos.x;
                     this.y = targetPos.y;

@@ -438,21 +438,28 @@ class UISystem {
             );
         }
 
-        // Combo counter (if active)
+        // Always-visible multiplier and speed readouts
         if (window.game && window.game.systems.pellets) {
-            const comboInfo = window.game.systems.pellets.getComboInfo();
-            if (comboInfo.active) {
-                const comboX = 1000 - 170;
-                const comboY = 50;
+            const pellets = window.game.systems.pellets;
+            const comboInfo = pellets.getComboInfo();
+            const comboX = 1000 - 170;
+            const comboY = 50;
 
-                ctx.fillStyle = this._getElementColorFromHex(
-                    "#FFD700",
-                    1,
-                    "combo",
-                );
-                ctx.font = "bold 24px 'Nova Square', monospace";
+            // Multiplier (score combo multiplier), always shown
+            const mult = (comboInfo?.multiplier ?? 1);
+            ctx.fillStyle = this._getElementColorFromHex("#FFD700", 1, "combo");
+            ctx.font = "bold 24px 'Nova Square', monospace";
+            ctx.textAlign = "center";
+            ctx.fillText(`Mult. x${mult.toFixed(2)}`, comboX, comboY);
+
+            // Speed multiplier beneath
+            if (typeof pellets.getSpeedInfo === "function") {
+                const speedInfo = pellets.getSpeedInfo();
+                const spdMult = (speedInfo?.multiplier || 1);
+                ctx.fillStyle = this._getElementColorFromHex("#0099FF", 1, "combo");
+                ctx.font = "bold 18px 'Nova Square', monospace";
                 ctx.textAlign = "center";
-                ctx.fillText(`Combo x${comboInfo.count}`, comboX, comboY);
+                ctx.fillText(`Speed x${spdMult.toFixed(2)}`, comboX, comboY + 26);
             }
         }
 
@@ -470,7 +477,7 @@ class UISystem {
     renderCinematic(ctx, uiData, currentTime) {
         // Show level info during cinematic
         if (uiData.level > 1) {
-            const titleText = `Level: ${uiData.mazeSize}x${uiData.mazeSize}`;
+            const titleText = `${uiData.mazeSize}x${uiData.mazeSize}`;
             const centerX = 500;
             const centerY = 300;
 

@@ -9,7 +9,6 @@ class Player {
         this.vy = 0;
         this.width = 15;
         this.height = 15;
-        this.hidden = false;
         
         // Path recording for ghost
         this.path = [];
@@ -64,20 +63,27 @@ class Player {
     }
     
     render(ctx) {
-        if (this.hidden) return;
         // Render trail ghosts first (behind player)
         for (const ghost of this.trail) {
             ctx.fillStyle = `rgba(0, 80, 255, ${ghost.alpha.toFixed(3)})`;
             ctx.fillRect(ghost.x + 2, ghost.y + 2, 11, 11);
         }
         
-        // Render player
+        // Render player with tint based on speed stacks
         const pelletSystem = window.game ? window.game.systems.pellets : null;
-        if (pelletSystem && pelletSystem.isSpeedBoosted()) {
-            ctx.fillStyle = "#6699FF"; // Lighter blue for speed boost
-        } else {
-            ctx.fillStyle = "#0000FF"; // Standard blue
+        let color = "#0000FF"; // Standard blue
+        if (pelletSystem && typeof pelletSystem.getSpeedInfo === "function") {
+            const info = pelletSystem.getSpeedInfo();
+            const count = info?.count || 0;
+            // Ease toward baby blue as stacks increase
+            const t = 1 - Math.pow(0.8, Math.max(0, count)); // 0..~1
+            // Base blue (0,0,255) -> Baby blue (153,204,255)
+            const r = Math.round(0 * (1 - t) + 153 * t);
+            const g = Math.round(0 * (1 - t) + 204 * t);
+            const b = 255; // stays at 255
+            color = `rgb(${r},${g},${b})`;
         }
+        ctx.fillStyle = color;
         ctx.fillRect(this.x, this.y, this.width, this.height);
     }
     
@@ -103,7 +109,6 @@ class Player {
         this.trail = [];
         this.trailEmitT = 0;
         this.path = []; // Reset path on new level/restart
-        this.hidden = false;
     }
     
     moveToSafePosition(mazeSystem) {
